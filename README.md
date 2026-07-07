@@ -49,7 +49,7 @@ Download the pre-compiled binary from [Releases](https://github.com/HaakimSec/Go
 
 ```bash
 # Linux (amd64)
-wget https://github.com/HaakimSec/GoUpload/releases/download/v1.0.0/goupload_linux_amd64
+wget https://github.com/HaakimSec/GoUpload/releases/download/v1.0.0/GoUpload_linux_amd64
 chmod +x GoUpload_linux_amd64
 sudo mv GoUpload_linux_amd64 /usr/local/bin/GoUpload
 
