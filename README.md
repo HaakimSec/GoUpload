@@ -26,8 +26,8 @@ go install -v github.com/HaakimSec/GoUpload@latest
 ```
 After installation, run:
 
-```bash 
-goupload --help
+```bash
+GoUpload --help
 ```
 
 ### Method 2: Build from Source
@@ -37,10 +37,10 @@ git clone https://github.com/HaakimSec/GoUpload.git
 cd GoUpload
 
 # Build
-go build -o goupload main.go
+go build -o GoUpload main.go
 
 # Move to PATH (optional)
-sudo mv goupload /usr/local/bin/
+sudo mv GoUpload /usr/local/bin/
 ```
 
 ### Method 3: Download Binary
@@ -50,29 +50,29 @@ Download the pre-compiled binary from [Releases](https://github.com/HaakimSec/Go
 ```bash
 # Linux (amd64)
 wget https://github.com/HaakimSec/GoUpload/releases/download/v1.0.0/goupload_linux_amd64
-chmod +x goupload_linux_amd64
-sudo mv goupload_linux_amd64 /usr/local/bin/goupload
+chmod +x GoUpload_linux_amd64
+sudo mv GoUpload_linux_amd64 /usr/local/bin/GoUpload
 
 # macOS (amd64)
 wget https://github.com/HaakimSec/GoUpload/releases/download/v1.0.0/goupload_darwin_amd64
-chmod +x goupload_darwin_amd64
-sudo mv goupload_darwin_amd64 /usr/local/bin/goupload
+chmod +x GoUpload_darwin_amd64
+sudo mv GoUpload_darwin_amd64 /usr/local/bin/GoUpload
 
 # Windows (amd64)
-# Download goupload_windows_amd64.exe from Releases
+# Download GoUpload_windows_amd64.exe from Releases
 ```
 
 ### Verify Installation
 
 ```bash
-goupload --help
+GoUpload --help
 ```
 You should see the rainbow ASCII art banner! 🌈
 
 ## 🛠️ Usage
 
-```text 
-goupload -u <URL> -p <param> [flags]
+```text
+GoUpload -u <URL> -p <param> [flags]
 
 Flags:
   -u, --url          Target upload endpoint URL (required)
@@ -90,12 +90,12 @@ Flags:
 
  ```plaintext
 <pre align="center">
-  ____        _   _       _                 _ 
+  ____        _   _       _                 _
  / ___| ___  | | | |_ __ | | ___   __ _  __| |
 | |  _ / _ \ | | | | '_ \| |/ _ \ / _` |/ _` |
 | |_| | (_) || |_| | |_) | | (_) | (_| | (_| |
  \____|\___/  \___/| .__/|_|\___/ \__,_/\__,_|
-                   |_|                        
+                   |_|
 
   ⚡ Web Application File Upload Security Tester ⚡
 </pre>
@@ -152,7 +152,7 @@ Flags:
 ## 🏗️ Architecture
 
 ```text
-goupload/
+GoUpload/
 ├── main.go                    # Entry point
 ├── internal/
 │   ├── config/                # CLI parsing & configuration
