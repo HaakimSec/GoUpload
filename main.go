@@ -8,13 +8,13 @@ import (
 
 	"github.com/fatih/color"
 
-	"goupload/internal/config"
-	"goupload/internal/fingerprint"
-	"goupload/internal/oracle"
-	"goupload/internal/output"
-	"goupload/internal/payload"
-	"goupload/internal/types"
-	"goupload/internal/worker"
+	"github.com/HaakimSec/GoUpload/internal/config"
+	"github.com/HaakimSec/GoUpload/internal/fingerprint"
+	"github.com/HaakimSec/GoUpload/internal/oracle"
+	"github.com/HaakimSec/GoUpload/internal/output"
+	"github.com/HaakimSec/GoUpload/internal/payload"
+	"github.com/HaakimSec/GoUpload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/worker"
 )
 
 func main() {

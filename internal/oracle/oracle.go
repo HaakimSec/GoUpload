@@ -5,8 +5,8 @@ import (
 	"math"
 	"strings"
 
-	"goupload/internal/payload"
-	"goupload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/payload"
+	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
 // Verdict indicates the assessed risk level of a test result.

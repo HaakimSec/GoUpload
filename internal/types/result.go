@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	"goupload/internal/payload"
+	"github.com/HaakimSec/GoUpload/internal/payload"
 )
 
 // Result holds the outcome of a single upload test.

@@ -1,4 +1,4 @@
-module goupload
+module github.com/HaakimSec/GoUpload
 
 go 1.25.0
 

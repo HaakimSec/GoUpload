@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"goupload/internal/oracle"
-	"goupload/internal/payload"
-	"goupload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/oracle"
+	"github.com/HaakimSec/GoUpload/internal/payload"
+	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
 // ResultHandler is a callback invoked for each completed test result.

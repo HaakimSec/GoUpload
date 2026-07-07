@@ -8,8 +8,8 @@ import (
 
 	"github.com/fatih/color"
 
-	"goupload/internal/oracle"
-	"goupload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/oracle"
+	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
 var (
