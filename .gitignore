@@ -1,0 +1,27 @@
+# Binary
+goupload
+goupload.exe
+goupload_linux
+goupload_mac
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Test files
+*.test
+*.out
+
+# Temporary
+tmp/
+temp/
