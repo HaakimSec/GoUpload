@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/output"
 	"github.com/HaakimSec/GoUpload/internal/payload"
 	"github.com/HaakimSec/GoUpload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/validator"
 	"github.com/HaakimSec/GoUpload/internal/worker"
 )
 
@@ -25,9 +27,55 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── VALIDATE TARGET BEFORE RUNNING ───────────────────────────────────
+	if !cfg.NoValidate {
+		fmt.Fprintf(os.Stderr, "  🔍 Validating target...\n")
+
+		if err := validator.ValidateTarget(cfg.URL, 10*time.Second); err != nil {
+			fmt.Fprintf(os.Stderr, "\n  ❌ Target validation failed:\n")
+			fmt.Fprintf(os.Stderr, "  %s\n\n", err)
+			fmt.Fprintf(os.Stderr, "  💡 Tips:\n")
+			fmt.Fprintf(os.Stderr, "    - Make sure the URL is correct and the server is running\n")
+			fmt.Fprintf(os.Stderr, "    - Try: GoUpload --check -u %s\n", cfg.URL)
+			fmt.Fprintf(os.Stderr, "    - Use --no-validate to skip this check\n\n")
+			os.Exit(1)
+		}
+
+		color.New(color.FgGreen).Fprintf(os.Stderr, "  ✅ Target is reachable\n")
+
+		// Show warnings
+		warnings := validator.GetWarnings(cfg.URL)
+		for _, w := range warnings {
+			color.New(color.FgYellow).Fprintf(os.Stderr, "  ⚠️  %s\n", w)
+		}
+
+		// Test upload endpoint if allow-list provided
+		if len(cfg.AllowList) > 0 {
+			fmt.Fprintf(os.Stderr, "  📤 Testing upload endpoint...\n")
+			if err := validator.ValidateUploadEndpoint(cfg.URL, cfg.Param, 10*time.Second); err != nil {
+				color.New(color.FgYellow).Fprintf(os.Stderr, "  ⚠️  Warning: %s\n", err)
+				color.New(color.FgYellow).Fprintf(os.Stderr, "  Continuing anyway, but results may be inaccurate.\n")
+			} else {
+				color.New(color.FgGreen).Fprintf(os.Stderr, "  ✅ Upload endpoint is functional\n")
+			}
+		}
+
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// ── CHECK ONLY MODE ──────────────────────────────────────────────────
+	if cfg.CheckOnly {
+		fmt.Fprintln(os.Stderr)
+		color.New(color.FgGreen, color.Bold).Fprintln(os.Stderr, "  ✅ Target validation passed - endpoint is reachable and ready for testing!")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "  Run without --check to start the full scan:\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload -u %s -p %s --allow-list .txt,.jpg\n\n", cfg.URL, cfg.Param)
+		os.Exit(0)
+	}
+
 	// ── FINGERPRINT TARGET (AUTO-DETECT TECH STACK) ─────────────────────
 	techStack := cfg.TechStack
-	
+
 	if cfg.AutoDetect || techStack == "auto" {
 		fmt.Fprintf(os.Stderr, "  🔍 Fingerprinting target...\n")
 		ts, err := fingerprint.Fingerprint(cfg.URL, cfg.Headers)
@@ -139,7 +187,7 @@ func main() {
 	if techStack == "all" && (stats.Vulnerable > 0 || stats.Suspect > 0) {
 		fmt.Fprintln(color.Output)
 		color.New(color.FgCyan).Fprintln(os.Stderr, "  💡 Tip: Use --auto-detect to fingerprint the target and reduce payloads.")
-		color.New(color.FgCyan).Fprintf(os.Stderr, "     Example: goupload -u %s -p %s --auto-detect\n", cfg.URL, cfg.Param)
+		color.New(color.FgCyan).Fprintf(os.Stderr, "     Example: GoUpload -u %s -p %s --auto-detect\n", cfg.URL, cfg.Param)
 	}
 
 	// ── Exit code based on findings ──────────────────────────────────────

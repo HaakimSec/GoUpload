@@ -20,6 +20,8 @@ type Config struct {
 	Concurrency int
 	TechStack   string // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
 	AutoDetect  bool   // Auto-detect tech stack before testing
+	CheckOnly   bool   // Only validate target, don't run tests
+	NoValidate  bool   // Skip target validation
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -38,6 +40,8 @@ func Parse() (*Config, error) {
 		concurrency int
 		techStack   string
 		autoDetect  bool
+		checkOnly   bool
+		noValidate  bool
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -54,6 +58,9 @@ func Parse() (*Config, error) {
 	flag.StringVar(&techStack, "tech", "all", "Target tech stack: php, asp.net, java, nodejs, python, all, auto")
 	flag.StringVar(&techStack, "t", "all", "Target tech stack (shorthand)")
 	flag.BoolVar(&autoDetect, "auto-detect", false, "Auto-detect target tech stack before testing")
+	flag.BoolVar(&checkOnly, "check", false, "Only validate target connectivity (no payloads)")
+	flag.BoolVar(&checkOnly, "C", false, "Only validate target connectivity (shorthand)")
+	flag.BoolVar(&noValidate, "no-validate", false, "Skip target validation before testing")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -68,7 +75,7 @@ func Parse() (*Config, error) {
 
 		// Rainbow ASCII Art Banner
 		logo := []string{
-			"    ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ",
+			"   ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ",
 			"  ██╔════╝ ██╔═══██╗██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗",
 			"  ██║  ███╗██║   ██║██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║",
 			"  ██║   ██║██║   ██║██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║",
@@ -85,14 +92,14 @@ func Parse() (*Config, error) {
 		// Subtitle
 		subtitle := color.New(color.FgWhite, color.Bold)
 		flame := color.New(color.FgYellow, color.Bold)
-		flame.Fprint(os.Stderr, "    ⚡ ")
+		flame.Fprint(os.Stderr, "   ⚡ ")
 		subtitle.Fprint(os.Stderr, "Web Application File Upload Security Tester")
 		flame.Fprintln(os.Stderr, " ⚡")
 		fmt.Fprintln(os.Stderr)
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, "    v1.0.0  │  Built for Security Professionals  │  @haakimsec")
+		version.Fprintln(os.Stderr, "   v1.0.0  │  Built for Security Professionals  │  @haakimsec")
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -102,26 +109,27 @@ func Parse() (*Config, error) {
 
 		// Usage
 		bold := color.New(color.FgCyan, color.Bold)
-		bold.Fprintln(os.Stderr, "   USAGE:")
-		fmt.Fprintf(os.Stderr, "    GoUpload -u <URL> -p <param> [flags]\n")
+		bold.Fprintln(os.Stderr, "  USAGE:")
+		fmt.Fprintf(os.Stderr, "    goupload -u <URL> -p <param> [flags]\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Examples
-		bold.Fprintln(os.Stderr, "   EXAMPLES:")
+		bold.Fprintln(os.Stderr, "  EXAMPLES:")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload -p file\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload -H \"Authorization: Bearer TOKEN\"\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --allow-list \".jpg,.png\" -c 20\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --auto-detect\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --tech php\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload --check -u http://target.com/upload\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Flags
-		bold.Fprintln(os.Stderr, "   FLAGS:")
+		bold.Fprintln(os.Stderr, "  FLAGS:")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr)
 
 		// Tech Stack Info
-		bold.Fprintln(os.Stderr, "   TECH STACK OPTIONS:")
+		bold.Fprintln(os.Stderr, "  TECH STACK OPTIONS:")
 		fmt.Fprintf(os.Stderr, "    php      - PHP payloads (<?php shells, .php5, .phtml, etc.)\n")
 		fmt.Fprintf(os.Stderr, "    asp.net  - ASP.NET payloads (.asp, .aspx, .ashx, etc.)\n")
 		fmt.Fprintf(os.Stderr, "    java     - Java/JSP payloads (.jsp, .jspx, etc.)\n")
@@ -129,7 +137,7 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    python   - Python payloads (.py, etc.)\n")
 		fmt.Fprintf(os.Stderr, "    all      - Test all payloads (default)\n")
 		fmt.Fprintf(os.Stderr, "    auto     - Auto-detect via fingerprinting\n")
-		fmt.Fprintf(os.Stderr, "    fmt.Fprintln(os.Stderr)\n")
+		fmt.Fprintln(os.Stderr)
 	}
 
 	flag.Parse()
@@ -197,6 +205,8 @@ func Parse() (*Config, error) {
 		Concurrency: concurrency,
 		TechStack:   techStack,
 		AutoDetect:  autoDetect || techStack == "auto",
+		CheckOnly:   checkOnly,
+		NoValidate:  noValidate,
 	}, nil
 }
 
