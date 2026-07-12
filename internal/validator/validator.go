@@ -107,7 +107,7 @@ func ValidateTarget(targetURL string, timeout time.Duration) error {
 	return nil
 }
 
-// ValidateUploadEndpoint performs a quick test upload to verify the endpoint
+// ValidateUploadEndpoint performs a quick test upload to verify the endpoint stability
 func ValidateUploadEndpoint(targetURL, param string, timeout time.Duration) error {
 	// Create a benign test file
 	body := &bytes.Buffer{}
@@ -134,10 +134,18 @@ func ValidateUploadEndpoint(targetURL, param string, timeout time.Duration) erro
 	}
 	defer resp.Body.Close()
 
-	// Read response body (limited)
+	// Read response body safely (limited memory allocation)
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 
-	// Check for server errors
+	// Check for explicit multi-part response anomalies
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("upload multipart endpoint returned 404 Not Found - check your parameter or target path")
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("authentication required (HTTP %d) - please pass session tokens via custom headers (-H)", resp.StatusCode)
+	}
+
 	if resp.StatusCode >= 500 {
 		return fmt.Errorf("upload endpoint returned server error (HTTP %d): %s",
 			resp.StatusCode, string(respBody[:min(len(respBody), 100)]))
