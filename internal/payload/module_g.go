@@ -24,7 +24,7 @@ func moduleG() []*Payload {
 
 	for _, rt := range rtloTests {
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: rt.technique,
 			Filename:  rt.filename,
 			Extension: ".php", // Actual extension after RTLO
@@ -53,7 +53,7 @@ func moduleG() []*Payload {
 	for _, zw := range zeroWidthTests {
 		filename := fmt.Sprintf("test%c.php", zw.char)
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Zero-width: %s in filename", zw.charName),
 			Filename:  filename,
 			Extension: ".php",
@@ -64,7 +64,7 @@ func moduleG() []*Payload {
 		// Also test zero-width after extension
 		filename2 := fmt.Sprintf("test.php%c.jpg", zw.char)
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Zero-width after extension: %s", zw.charName),
 			Filename:  filename2,
 			Extension: ".jpg",
@@ -88,7 +88,7 @@ func moduleG() []*Payload {
 
 	for _, hg := range homographTests {
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: hg.technique,
 			Filename:  hg.filename,
 			Extension: extractExtension(hg.filename),
@@ -114,7 +114,7 @@ func moduleG() []*Payload {
 
 	for _, nt := range normalizationTests {
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: nt.technique,
 			Filename:  nt.filename,
 			Extension: ".php",
@@ -136,7 +136,7 @@ func moduleG() []*Payload {
 
 	for _, ot := range overlongTests {
 		tests = append(tests, &Payload{
-			TestType:  TestTypePathTraversal,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: ot.technique,
 			Filename:  ot.filename,
 			Extension: ".php",
@@ -147,8 +147,8 @@ func moduleG() []*Payload {
 
 	// G6: Unicode whitespace characters
 	unicodeSpaces := []struct {
-		char      rune
-		charName  string
+		char     rune
+		charName string
 	}{
 		{'\u00A0', "Non-breaking Space"},
 		{'\u1680', "Ogham Space Mark"},
@@ -173,7 +173,7 @@ func moduleG() []*Payload {
 		// Space before extension
 		filename1 := fmt.Sprintf("test%c.php", us.char)
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Unicode whitespace: %s before extension", us.charName),
 			Filename:  filename1,
 			Extension: ".php",
@@ -184,7 +184,7 @@ func moduleG() []*Payload {
 		// Space after extension
 		filename2 := fmt.Sprintf("test.php%c", us.char)
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Unicode whitespace: %s after extension", us.charName),
 			Filename:  filename2,
 			Extension: ".php",
@@ -210,7 +210,7 @@ func moduleG() []*Payload {
 	for _, em := range emojiTests {
 		filename := fmt.Sprintf("test%s.php", em.emoji)
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: em.technique,
 			Filename:  filename,
 			Extension: ".php",
@@ -234,7 +234,7 @@ func moduleG() []*Payload {
 
 	for _, bt := range bidiTests {
 		tests = append(tests, &Payload{
-			TestType:  TestTypeFilenameObfuscation,
+			TestType:  TestTypeUnicodeEncoding, // 🚀 Fixed mapping
 			Technique: bt.technique,
 			Filename:  bt.filename,
 			Extension: ".php",

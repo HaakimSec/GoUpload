@@ -125,20 +125,26 @@ func main() {
 	// ── Execute tests module by module ───────────────────────────────────
 	allResults := make([]*types.Result, 0, len(allPayloads))
 
+	// 🚀 Fixed & Added missing modules to pipeline array
 	moduleOrder := []payload.TestType{
 		payload.TestTypeExtensionEvasion,
 		payload.TestTypeContentTypeSpoof,
 		payload.TestTypeMagicByteSpoof,
 		payload.TestTypeFilenameObfuscation,
 		payload.TestTypePathTraversal,
+		payload.TestTypeServerConfig,      // Module F
+		payload.TestTypeUnicodeEncoding,   // Module G (The one we fixed!)
 	}
 
+	// 🚀 Added missing modules to naming dictionary
 	moduleNames := map[payload.TestType]string{
 		payload.TestTypeExtensionEvasion:    "MODULE A: Extension Evasion Matrix",
 		payload.TestTypeContentTypeSpoof:    "MODULE B: Content-Type Spoofing",
 		payload.TestTypeMagicByteSpoof:      "MODULE B: Magic Byte Injection",
 		payload.TestTypeFilenameObfuscation: "MODULE C: Filename Obfuscation & Sanitization Faults",
 		payload.TestTypePathTraversal:       "MODULE D: Path Traversal Sequences",
+		payload.TestTypeServerConfig:        "MODULE F: Server Configuration Overrides",
+		payload.TestTypeUnicodeEncoding:     "MODULE G: Unicode & Encoding Vulnerabilities",
 	}
 
 	for _, modType := range moduleOrder {

