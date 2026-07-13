@@ -11,9 +11,10 @@ const (
 	TestTypeMagicByteSpoof      TestType = "Magic Byte Spoof"
 	TestTypeFilenameObfuscation TestType = "Filename Obfuscation"
 	TestTypePathTraversal       TestType = "Path Traversal"
-	TestTypeSizeBoundary        TestType = "Size Boundary"      // 🚀 Added for Module E
-	TestTypePolyglotArchive     TestType = "Polyglot & Archive" // 🚀 Added for Module F
-	TestTypeUnicodeEncoding     TestType = "Unicode Encoding"   // 🚀 Added for Module G
+	TestTypeSizeBoundary        TestType = "Size Boundary"      
+	TestTypePolyglotArchive     TestType = "Polyglot & Archive" 
+	TestTypeUnicodeEncoding     TestType = "Unicode Encoding"   
+    TestTypeServerConfig        TestType = "Server Configuration"
 )
 
 type Payload struct {
