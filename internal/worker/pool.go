@@ -143,34 +143,74 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 		}
 	}
 
-	// If the payload specifies a Content-Type override, use CreatePart
-	// to manually set Content-Type for the file part
-	if pl.ContentType != "" {
-		h := make(map[string][]string)
-		h["Content-Disposition"] = []string{
-			fmt.Sprintf(`form-data; name="%s"; filename="%s"`, p.config.Param, pl.Filename),
+	// ── BRANCH 1: GRAPHQL MULTIPART UPLOADS ──
+	if pl.GraphQL != nil {
+		// 1. Write GraphQL operations field
+		if err := writer.WriteField("operations", pl.GraphQL.Operations); err != nil {
+			r.Err = fmt.Errorf("failed to write GraphQL operations: %w", err)
+			r.Duration = time.Since(start)
+			return r
 		}
-		h["Content-Type"] = []string{pl.ContentType}
 
-		part, err := writer.CreatePart(h)
+		// 2. Write GraphQL map field
+		if err := writer.WriteField("map", pl.GraphQL.Map); err != nil {
+			r.Err = fmt.Errorf("failed to write GraphQL map: %w", err)
+			r.Duration = time.Since(start)
+			return r
+		}
+
+		// 3. Prepare the part with or without Content-Type override
+		var part io.Writer
+		var err error
+
+		if pl.ContentType != "" {
+			h := make(map[string][]string)
+			h["Content-Disposition"] = []string{
+				fmt.Sprintf(`form-data; name="%s"; filename="%s"`, pl.GraphQL.FileIndex, pl.Filename),
+			}
+			h["Content-Type"] = []string{pl.ContentType}
+
+			part, err = writer.CreatePart(h)
+		} else {
+			part, err = writer.CreateFormFile(pl.GraphQL.FileIndex, pl.Filename)
+		}
+
 		if err != nil {
-			r.Err = fmt.Errorf("failed to create part with override Content-Type: %w", err)
+			r.Err = fmt.Errorf("failed to create GraphQL file part: %w", err)
 			r.Duration = time.Since(start)
 			return r
 		}
+
+		// 4. Copy the file binary data into the part
 		if _, err := io.Copy(part, bytes.NewReader(pl.Body)); err != nil {
-			r.Err = fmt.Errorf("failed to write payload body: %w", err)
+			r.Err = fmt.Errorf("failed to write file content: %w", err)
 			r.Duration = time.Since(start)
 			return r
 		}
+
+	// ── BRANCH 2: STANDARD REST MULTIPART UPLOADS ──
 	} else {
-		// Standard file part (no Content-Type override)
-		part, err := writer.CreateFormFile(p.config.Param, pl.Filename)
+		var part io.Writer
+		var err error
+
+		if pl.ContentType != "" {
+			h := make(map[string][]string)
+			h["Content-Disposition"] = []string{
+				fmt.Sprintf(`form-data; name="%s"; filename="%s"`, p.config.Param, pl.Filename),
+			}
+			h["Content-Type"] = []string{pl.ContentType}
+
+			part, err = writer.CreatePart(h)
+		} else {
+			part, err = writer.CreateFormFile(p.config.Param, pl.Filename)
+		}
+
 		if err != nil {
 			r.Err = fmt.Errorf("failed to create form file: %w", err)
 			r.Duration = time.Since(start)
 			return r
 		}
+
 		if _, err := io.Copy(part, bytes.NewReader(pl.Body)); err != nil {
 			r.Err = fmt.Errorf("failed to write payload body: %w", err)
 			r.Duration = time.Since(start)

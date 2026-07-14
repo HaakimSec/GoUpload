@@ -243,6 +243,38 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
+	// ── ADDED CHECK: GraphQL response detection ──
+	if pl.GraphQL != nil {
+		lower := strings.ToLower(result.BodySnippet)
+
+		// GraphQL success indicators
+		graphQLSuccessIndicators := []string{
+			`"data":{`, `"data": {`,
+			`"id":`, `"filename":`, `"url":`,
+			`"success":true`, `"success": true`,
+			`"uploaded":true`,
+		}
+		for _, indicator := range graphQLSuccessIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "graphql-mutation-accepted")
+				break
+			}
+		}
+
+		// GraphQL error indicators
+		graphQLErrorIndicators := []string{
+			`"errors":[{`, `"errors": [{`,
+			"cannot be null", "invalid type",
+			"argument", "not provided",
+		}
+		for _, indicator := range graphQLErrorIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "graphql-validation-error")
+				break
+			}
+		}
+	}
+
 	verdict := determineVerdict(flags, result, pl)
 
 	return AnalysisResult{
@@ -257,13 +289,24 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictError
 	}
 
-	if !isSuccessStatus(result.StatusCode) {
-		return VerdictSafe
-	}
-
 	flagSet := make(map[string]bool)
 	for _, f := range flags {
 		flagSet[f] = true
+	}
+
+	// GraphQL Validation Safeguard: If schema parsing or validation failed, the file was rejected.
+	if flagSet["graphql-validation-error"] {
+		return VerdictSafe
+	}
+
+	// GraphQL mutation accepted with executable extension = VULNERABLE
+	if flagSet["graphql-mutation-accepted"] && hasSuspiciousExt(pl) {
+		return VerdictVulnerable
+	}
+
+	// Fall back to HTTP status check for rest of standard modules
+	if !isSuccessStatus(result.StatusCode) {
+		return VerdictSafe
 	}
 
 	// HIGH CONFIDENCE: HTML success + filepath disclosure = VULNERABLE
@@ -318,6 +361,7 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		"html-indicates-success",
 		"filepath-disclosed",
 		"image-upload-accepted",
+		"graphql-mutation-accepted",
 	}
 	supportCount := 0
 	for _, sf := range supportingFlags {
