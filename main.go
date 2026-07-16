@@ -90,7 +90,11 @@ func main() {
 	}
 
 	// ── Generate filtered payloads based on tech stack ───────────────────
-	allPayloads := payload.AllPayloads(techStack)
+	allPayloads := payload.AllPayloads(techStack,
+		cfg.GraphQLMutation,
+		cfg.GraphQLVariable,
+		cfg.ModulePath,
+		cfg.ModuleOverwrite)
 	printer := output.NewPrinter(len(allPayloads))
 	printer.PrintBanner(cfg.URL, cfg.Param, cfg.Concurrency, len(allPayloads))
 
@@ -132,8 +136,8 @@ func main() {
 		payload.TestTypeMagicByteSpoof,
 		payload.TestTypeFilenameObfuscation,
 		payload.TestTypePathTraversal,
-		payload.TestTypeServerConfig,      // Module F
-		payload.TestTypeUnicodeEncoding,   // Module G (The one we fixed!)
+		payload.TestTypeServerConfig,    // Module F
+		payload.TestTypeUnicodeEncoding, // Module G (The one we fixed!)
 	}
 
 	// 🚀 Added missing modules to naming dictionary
@@ -257,3 +261,4 @@ func mapLanguageToTechStack(language string) string {
 		return "all"
 	}
 }
+

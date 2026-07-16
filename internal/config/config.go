@@ -12,16 +12,20 @@ import (
 
 // Config holds all parsed CLI configuration.
 type Config struct {
-	URL         string
-	Param       string
-	Headers     map[string]string
-	Data        map[string]string
-	AllowList   []string
-	Concurrency int
-	TechStack   string // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
-	AutoDetect  bool   // Auto-detect tech stack before testing
-	CheckOnly   bool   // Only validate target, don't run tests
-	NoValidate  bool   // Skip target validation
+	URL             string
+	Param           string
+	Headers         map[string]string
+	Data            map[string]string
+	AllowList       []string
+	Concurrency     int
+	TechStack       string // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
+	AutoDetect      bool   // Auto-detect tech stack before testing
+	CheckOnly       bool   // Only validate target, don't run tests
+	NoValidate      bool   // Skip target validation
+	GraphQLMutation string // Custom GraphQL mutation string
+	GraphQLVariable string // GraphQL variable name for file upload
+	ModuleOverwrite bool   // Enable Node.js module overwrite payloads
+	ModulePath      string // Custom module path for overwrite
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -32,16 +36,20 @@ type HeaderFile struct {
 // Parse reads and validates CLI flags, returning a populated Config.
 func Parse() (*Config, error) {
 	var (
-		url         string
-		param       string
-		headersRaw  string
-		dataRaw     string
-		allowRaw    string
-		concurrency int
-		techStack   string
-		autoDetect  bool
-		checkOnly   bool
-		noValidate  bool
+		url             string
+		param           string
+		headersRaw      string
+		dataRaw         string
+		allowRaw        string
+		concurrency     int
+		techStack       string
+		autoDetect      bool
+		checkOnly       bool
+		noValidate      bool
+		graphqlMutation string
+		graphqlVariable string
+		moduleOverwrite bool
+		modulePath      string
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -61,6 +69,10 @@ func Parse() (*Config, error) {
 	flag.BoolVar(&checkOnly, "check", false, "Only validate target connectivity (no payloads)")
 	flag.BoolVar(&checkOnly, "C", false, "Only validate target connectivity (shorthand)")
 	flag.BoolVar(&noValidate, "no-validate", false, "Skip target validation before testing")
+	flag.StringVar(&graphqlMutation, "graphql-mutation", "", "Custom GraphQL mutation string")
+	flag.StringVar(&graphqlVariable, "graphql-variable", "file", "GraphQL variable name for file")
+	flag.BoolVar(&moduleOverwrite, "module-overwrite", false, "Enable Node.js module overwrite payloads")
+	flag.StringVar(&modulePath, "module-path", "../../", "Base path for module overwrite traversal")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -110,7 +122,7 @@ func Parse() (*Config, error) {
 		// Usage
 		bold := color.New(color.FgCyan, color.Bold)
 		bold.Fprintln(os.Stderr, "  USAGE:")
-		fmt.Fprintf(os.Stderr, "    goupload -u <URL> -p <param> [flags]\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload -u <URL> -p <param> [flags]\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Examples
@@ -121,6 +133,7 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --auto-detect\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --tech php\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload --check -u http://target.com/upload\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload -u https://api.target.com/graphql --graphql-mutation \"mutation(\\$file:Upload!){uploadFile(file:\\$file){id}}\"\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Flags
@@ -197,16 +210,20 @@ func Parse() (*Config, error) {
 	}
 
 	return &Config{
-		URL:         url,
-		Param:       param,
-		Headers:     headers,
-		Data:        data,
-		AllowList:   allowList,
-		Concurrency: concurrency,
-		TechStack:   techStack,
-		AutoDetect:  autoDetect || techStack == "auto",
-		CheckOnly:   checkOnly,
-		NoValidate:  noValidate,
+		URL:             url,
+		Param:           param,
+		Headers:         headers,
+		Data:            data,
+		AllowList:       allowList,
+		Concurrency:     concurrency,
+		TechStack:       techStack,
+		AutoDetect:      autoDetect || techStack == "auto",
+		CheckOnly:       checkOnly,
+		NoValidate:      noValidate,
+		GraphQLMutation: graphqlMutation,
+		GraphQLVariable: graphqlVariable,
+		ModuleOverwrite: moduleOverwrite,
+		ModulePath:      modulePath,
 	}, nil
 }
 
@@ -271,3 +288,4 @@ func parseFormData(raw string) (map[string]string, error) {
 	}
 	return data, nil
 }
+

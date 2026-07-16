@@ -174,17 +174,14 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 	}
 
 	if pl.TestType == payload.TestTypeContentTypeSpoof {
-		// Check if spoofed content-type was accepted
 		if pl.ContentType != "" && !strings.HasPrefix(pl.ContentType, "text/") {
 			lower := strings.ToLower(result.BodySnippet)
-			// Check for success with wrong content-type
 			if strings.Contains(lower, "upload") &&
 				(strings.Contains(lower, "success") || strings.Contains(lower, "uploaded")) {
 				flags = append(flags, "content-type-spoof-accepted")
 			}
 		}
 
-		// Also check if server reflects content-type bypass
 		if result.RespCT != "" && pl.ContentType != "" {
 			if strings.Contains(result.RespCT, pl.ContentType) {
 				flags = append(flags, "content-type-reflected")
@@ -230,7 +227,6 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			}
 		}
 
-		// Check for EXIF-related responses
 		exifIndicators := []string{
 			"exif", "metadata", "image description",
 			"comment", "makernote",
@@ -243,35 +239,35 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
-	// ── ADDED CHECK: GraphQL response detection ──
+	// Check 9: GraphQL response detection
 	if pl.GraphQL != nil {
 		lower := strings.ToLower(result.BodySnippet)
 
-		// GraphQL success indicators
-		graphQLSuccessIndicators := []string{
-			`"data":{`, `"data": {`,
-			`"id":`, `"filename":`, `"url":`,
-			`"success":true`, `"success": true`,
-			`"uploaded":true`,
-		}
-		for _, indicator := range graphQLSuccessIndicators {
-			if strings.Contains(lower, indicator) {
-				flags = append(flags, "graphql-mutation-accepted")
-				break
+		// Check for GraphQL success
+		if strings.Contains(lower, `"data":{`) || strings.Contains(lower, `"data": {`) {
+			flags = append(flags, "graphql-mutation-accepted")
+
+			// Check if it returned expected fields
+			if strings.Contains(lower, `"__typename"`) || strings.Contains(lower, `"resumeid"`) {
+				flags = append(flags, "graphql-expected-response")
 			}
 		}
 
-		// GraphQL error indicators
-		graphQLErrorIndicators := []string{
-			`"errors":[{`, `"errors": [{`,
-			"cannot be null", "invalid type",
-			"argument", "not provided",
+		// Check for GraphQL errors
+		if strings.Contains(lower, `"errors":[{`) || strings.Contains(lower, `"errors": [{"`) {
+			flags = append(flags, "graphql-errors-returned")
 		}
-		for _, indicator := range graphQLErrorIndicators {
-			if strings.Contains(lower, indicator) {
-				flags = append(flags, "graphql-validation-error")
-				break
-			}
+
+		// Check for stack traces (info disclosure!)
+		if strings.Contains(lower, "/home/") || strings.Contains(lower, "/var/www/") {
+			flags = append(flags, "graphql-stack-trace-disclosed")
+		}
+
+		// Check for Node.js specific errors
+		if strings.Contains(lower, "cannot find module") ||
+			strings.Contains(lower, "require(") ||
+			strings.Contains(lower, "node_modules") {
+			flags = append(flags, "nodejs-module-error-disclosed")
 		}
 	}
 
@@ -294,7 +290,7 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		flagSet[f] = true
 	}
 
-	// GraphQL Validation Safeguard: If schema parsing or validation failed, the file was rejected.
+	// GraphQL Validation Safeguard: If validation failed, the file was rejected
 	if flagSet["graphql-validation-error"] {
 		return VerdictSafe
 	}
@@ -304,7 +300,17 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictVulnerable
 	}
 
-	// Fall back to HTTP status check for rest of standard modules
+	// GraphQL stack trace disclosed = VULNERABLE (info disclosure)
+	if flagSet["graphql-stack-trace-disclosed"] {
+		return VerdictVulnerable
+	}
+
+	// Node.js module error disclosed = SUSPECT (potential path traversal success)
+	if flagSet["nodejs-module-error-disclosed"] {
+		return VerdictSuspect
+	}
+
+	// Fall back to HTTP status check for standard modules
 	if !isSuccessStatus(result.StatusCode) {
 		return VerdictSafe
 	}
@@ -335,7 +341,7 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictVulnerable
 	}
 
-	// EXIF data processed with image upload = VULNERABLE (potential file inclusion)
+	// EXIF data processed with image upload = VULNERABLE
 	if flagSet["exif-data-processed"] && flagSet["image-upload-accepted"] {
 		return VerdictVulnerable
 	}
@@ -362,6 +368,7 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		"filepath-disclosed",
 		"image-upload-accepted",
 		"graphql-mutation-accepted",
+		"graphql-expected-response",
 	}
 	supportCount := 0
 	for _, sf := range supportingFlags {
@@ -425,7 +432,7 @@ func isExecutableExtension(ext string) bool {
 		".sh": true, ".bash": true, ".zsh": true,
 		".exe": true, ".bat": true, ".cmd": true, ".ps1": true,
 		".msi": true, ".dll": true, ".so": true,
-		".shtml": true, ".shtm": true,
+		".shtml": true, ".shtm": true, ".js": true,
 	}
 
 	return executableExts[lower]
@@ -481,3 +488,4 @@ func (s SummaryStats) String() string {
 	return fmt.Sprintf("Total: %d | Safe: %d | Suspect: %d | Vulnerable: %d | Errors: %d | Avg: %.3fs",
 		s.Total, s.Safe, s.Suspect, s.Vulnerable, s.Errors, s.Duration)
 }
+
