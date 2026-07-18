@@ -26,6 +26,9 @@ type Config struct {
 	GraphQLVariable string // GraphQL variable name for file upload
 	ModuleOverwrite bool   // Enable Node.js module overwrite payloads
 	ModulePath      string // Custom module path for overwrite
+	Template        string // Path to single template file
+	TemplateDir     string // Path to templates directory
+	ListTemplates   bool   // List available templates
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -50,6 +53,9 @@ func Parse() (*Config, error) {
 		graphqlVariable string
 		moduleOverwrite bool
 		modulePath      string
+		templateFile    string
+		templateDir     string
+		listTemplates   bool
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -73,6 +79,9 @@ func Parse() (*Config, error) {
 	flag.StringVar(&graphqlVariable, "graphql-variable", "file", "GraphQL variable name for file")
 	flag.BoolVar(&moduleOverwrite, "module-overwrite", false, "Enable Node.js module overwrite payloads")
 	flag.StringVar(&modulePath, "module-path", "../../", "Base path for module overwrite traversal")
+	flag.StringVar(&templateFile, "template", "", "Path to template YAML file")
+	flag.StringVar(&templateDir, "templates-dir", "", "Path to templates directory")
+	flag.BoolVar(&listTemplates, "list-templates", false, "List available templates")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -224,6 +233,9 @@ func Parse() (*Config, error) {
 		GraphQLVariable: graphqlVariable,
 		ModuleOverwrite: moduleOverwrite,
 		ModulePath:      modulePath,
+		Template:        templateFile,
+		TemplateDir:     templateDir,
+		ListTemplates:   listTemplates,
 	}, nil
 }
 

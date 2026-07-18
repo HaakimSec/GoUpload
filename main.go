@@ -14,6 +14,7 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/oracle"
 	"github.com/HaakimSec/GoUpload/internal/output"
 	"github.com/HaakimSec/GoUpload/internal/payload"
+	"github.com/HaakimSec/GoUpload/internal/template"
 	"github.com/HaakimSec/GoUpload/internal/types"
 	"github.com/HaakimSec/GoUpload/internal/validator"
 	"github.com/HaakimSec/GoUpload/internal/worker"
@@ -89,12 +90,48 @@ func main() {
 		}
 	}
 
-	// ── Generate filtered payloads based on tech stack ───────────────────
-	allPayloads := payload.AllPayloads(techStack,
-		cfg.GraphQLMutation,
-		cfg.GraphQLVariable,
-		cfg.ModulePath,
-		cfg.ModuleOverwrite)
+	// ── TEMPLATE HANDLING ────────────────────────────────────────────────
+	if cfg.ListTemplates {
+		template.ListAvailableTemplates("templates/")
+		os.Exit(0)
+	}
+
+	var templatePayloads []*payload.Payload
+
+	if cfg.Template != "" {
+		tmpl, err := template.LoadTemplate(cfg.Template)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading template: %s\n", err)
+			os.Exit(1)
+		}
+		templatePayloads = tmpl.ToPayloads()
+		fmt.Printf("  📄 Loaded template: %s (%d payloads)\n", tmpl.Name, len(templatePayloads))
+	}
+
+	if cfg.TemplateDir != "" {
+		templates, err := template.LoadTemplates(cfg.TemplateDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading templates: %s\n", err)
+		} else {
+			for _, tmpl := range templates {
+				templatePayloads = append(templatePayloads, tmpl.ToPayloads()...)
+				fmt.Printf("  📄 Loaded template: %s\n", tmpl.Name)
+			}
+		}
+	}
+
+	// ── Generate payloads (from templates or standard modules) ───────────
+	var allPayloads []*payload.Payload
+	if len(templatePayloads) > 0 {
+		allPayloads = templatePayloads
+	} else {
+		allPayloads = payload.AllPayloads(techStack,
+			cfg.GraphQLMutation,
+			cfg.GraphQLVariable,
+			cfg.ModulePath,
+			cfg.ModuleOverwrite)
+	}
+
 	printer := output.NewPrinter(len(allPayloads))
 	printer.PrintBanner(cfg.URL, cfg.Param, cfg.Concurrency, len(allPayloads))
 
@@ -129,18 +166,16 @@ func main() {
 	// ── Execute tests module by module ───────────────────────────────────
 	allResults := make([]*types.Result, 0, len(allPayloads))
 
-	// 🚀 Fixed & Added missing modules to pipeline array
 	moduleOrder := []payload.TestType{
 		payload.TestTypeExtensionEvasion,
 		payload.TestTypeContentTypeSpoof,
 		payload.TestTypeMagicByteSpoof,
 		payload.TestTypeFilenameObfuscation,
 		payload.TestTypePathTraversal,
-		payload.TestTypeServerConfig,    // Module F
-		payload.TestTypeUnicodeEncoding, // Module G (The one we fixed!)
+		payload.TestTypeServerConfig,
+		payload.TestTypeUnicodeEncoding,
 	}
 
-	// 🚀 Added missing modules to naming dictionary
 	moduleNames := map[payload.TestType]string{
 		payload.TestTypeExtensionEvasion:    "MODULE A: Extension Evasion Matrix",
 		payload.TestTypeContentTypeSpoof:    "MODULE B: Content-Type Spoofing",

@@ -2,7 +2,10 @@ module github.com/HaakimSec/GoUpload
 
 go 1.25.0
 
-require github.com/fatih/color v1.19.0
+require (
+	github.com/fatih/color v1.19.0
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	github.com/mattn/go-colorable v0.1.14 // indirect

