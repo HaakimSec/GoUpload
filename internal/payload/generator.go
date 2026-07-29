@@ -6,6 +6,7 @@ import "strings"
 type TestType string
 
 const (
+    TestTypeTemplate            TestType = "Template"
 	TestTypeExtensionEvasion    TestType = "Extension Evasion"
 	TestTypeContentTypeSpoof    TestType = "Content-Type Spoof"
 	TestTypeMagicByteSpoof      TestType = "Magic Byte Spoof"

