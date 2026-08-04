@@ -29,6 +29,10 @@ type Config struct {
 	Template        string // Path to single template file
 	TemplateDir     string // Path to templates directory
 	ListTemplates   bool   // List available templates
+	ListModules     bool   // List available modules
+	Modules         []string // Specific modules to run
+	OutputFormat    string // json, table (default)
+	OutputFile      string // File path for output
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -56,6 +60,11 @@ func Parse() (*Config, error) {
 		templateFile    string
 		templateDir     string
 		listTemplates   bool
+	listModules     bool
+	modules         []string
+	moduleStr       string
+	outputFormat    string
+	outputFile      string
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -82,6 +91,11 @@ func Parse() (*Config, error) {
 	flag.StringVar(&templateFile, "template", "", "Path to template YAML file")
 	flag.StringVar(&templateDir, "templates-dir", "", "Path to templates directory")
 	flag.BoolVar(&listTemplates, "list-templates", false, "List available templates")
+	flag.BoolVar(&listModules, "list-modules", false, "List available modules and exit")
+	flag.StringVar(&moduleStr, "module", "", "Run specific modules: extension,content-type,magic-byte,filename,path-traversal,graphql,unicode,template,size-boundary,polyglot,server-config")
+	flag.StringVar(&moduleStr, "m", "", "Run specific modules (shorthand)")
+	flag.StringVar(&outputFormat, "output", "table", "Output format: table, json")
+	flag.StringVar(&outputFile, "output-file", "", "Save output to file")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -120,7 +134,7 @@ func Parse() (*Config, error) {
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, "   v1.0.0  │  Built for Security Professionals  │  @haakimsec")
+		version.Fprintln(os.Stderr, "   v1.2.0  │  Built for Security Professionals  │  @haakimsec")
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -163,6 +177,11 @@ func Parse() (*Config, error) {
 	}
 
 	flag.Parse()
+
+	// Parse module selection from comma-separated string
+	if moduleStr != "" {
+		modules = strings.Split(moduleStr, ",")
+	}
 
 	if url == "" {
 		return nil, fmt.Errorf("target URL is required (-u, --url)")
@@ -236,6 +255,10 @@ func Parse() (*Config, error) {
 		Template:        templateFile,
 		TemplateDir:     templateDir,
 		ListTemplates:   listTemplates,
+		OutputFormat:    outputFormat,
+		ListModules:    listModules,
+		Modules:        modules,
+		OutputFile:      outputFile,
 	}, nil
 }
 

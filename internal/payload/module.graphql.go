@@ -144,7 +144,7 @@ func moduleGraphQL() []*Payload {
 			payload := getPayloadForExtension(ft.ext)
 
 			tests = append(tests, &Payload{
-				TestType:    TestTypeExtensionEvasion,
+				TestType:    TestTypeGraphQL,
 				Technique:   fmt.Sprintf("GraphQL %s: %s", mut.name, ft.technique),
 				Filename:    fmt.Sprintf("gql_%s%s", mut.name, ft.ext),
 				Extension:   ft.ext,
@@ -183,7 +183,7 @@ func moduleGraphQL() []*Payload {
 		mapJSON, _ := json.Marshal(gqlMap)
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeGraphQL,
 			Technique: dt.technique,
 			Filename:  dt.filename,
 			Extension: extractExtension(dt.filename),
@@ -344,7 +344,7 @@ func moduleGraphQL() []*Payload {
 		mapJSON, _ := json.Marshal(gqlMap)
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeGraphQL,
 			Technique: fmt.Sprintf("GraphQL size boundary: %s", st.label),
 			Filename:  fmt.Sprintf("gql_size_%s.php", st.label),
 			Extension: ".php",
@@ -374,7 +374,7 @@ func moduleGraphQL() []*Payload {
 	batchMapJSON, _ := json.Marshal(batchMap)
 
 	tests = append(tests, &Payload{
-		TestType:  TestTypeExtensionEvasion,
+		TestType:  TestTypeGraphQL,
 		Technique: "GraphQL batch/multiple file upload (3 files)",
 		Filename:  "batch_upload.php",
 		Extension: ".php",
@@ -458,7 +458,7 @@ func moduleGraphQLWithMutation(mutation, variable, modulePath, techStack string,
 		mapJSON, _ := json.Marshal(gqlMap)
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeExtensionEvasion,
+			TestType:  TestTypeGraphQL,
 			Technique: ft.technique,
 			Filename:  "gql_custom" + ft.ext,
 			Extension: ft.ext,

@@ -16,6 +16,7 @@ const (
 	TestTypePolyglotArchive     TestType = "Polyglot & Archive"
 	TestTypeUnicodeEncoding     TestType = "Unicode Encoding"
 	TestTypeServerConfig        TestType = "Server Configuration"
+	TestTypeGraphQL             TestType = "GraphQL"
 )
 
 type Payload struct {
@@ -34,46 +35,83 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	var all []*Payload
 
 	if graphqlMutation != "" {
-		all = append(all, moduleGraphQLWithMutation(graphqlMutation, graphqlVariable, modulePath, techStack, moduleOverwrite)...)
-		return all // Skip other payloads for targeted GraphQL testing
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleGraphQLWithMutation(graphqlMutation, graphqlVariable, modulePath, techStack, moduleOverwrite)...)
+		}
+		return all
 	}
 
-	// Universal payloads - work on all platforms
-	all = append(all, moduleC()...)       // Filename Obfuscation
-	all = append(all, moduleE()...)       // Size Boundary Testing
-	all = append(all, moduleG()...)       // Unicode & Encoding Attacks
-	all = append(all, moduleGraphQL()...) // GraphQL File Uploads
+	if IsModuleEnabled(TestTypeFilenameObfuscation) {
+		all = append(all, moduleC()...)
+	}
+	if IsModuleEnabled(TestTypeSizeBoundary) {
+		all = append(all, moduleE()...)
+	}
+	if IsModuleEnabled(TestTypeUnicodeEncoding) {
+		all = append(all, moduleG()...)
+	}
+	if IsModuleEnabled(TestTypeExtensionEvasion) {
+		all = append(all, moduleGraphQL()...)
+	}
 
-	// Tech-specific payloads
 	switch strings.ToLower(techStack) {
 	case "php":
-		all = append(all, moduleA()...) // PHP Extension Evasion
-		all = append(all, moduleB()...) // Content-Type & Magic Bytes
-		all = append(all, moduleD()...) // Path Traversal
-		all = append(all, moduleF()...) // Polyglot & Archive Attacks
-
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleA()...)
+		}
+		if IsModuleEnabled(TestTypeContentTypeSpoof) || IsModuleEnabled(TestTypeMagicByteSpoof) {
+			all = append(all, moduleB()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
+		if IsModuleEnabled(TestTypePolyglotArchive) {
+			all = append(all, moduleF()...)
+		}
 	case "asp.net":
-		all = append(all, moduleA_ASP()...) // ASP.NET extensions only
-		all = append(all, moduleB_ASP()...) // ASP.NET Content-Type spoofing
-		all = append(all, moduleD()...)     // Path Traversal
-
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleA_ASP()...)
+		}
+		if IsModuleEnabled(TestTypeContentTypeSpoof) {
+			all = append(all, moduleB_ASP()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
 	case "java":
-		all = append(all, moduleA_JSP()...) // JSP extensions only
-		all = append(all, moduleD()...)     // Path Traversal
-
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleA_JSP()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
 	case "nodejs":
-		all = append(all, moduleNodeJS()...) // Node.js specific
-		all = append(all, moduleD()...)      // Path Traversal
-
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleNodeJS()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
 	case "python":
-		all = append(all, modulePython()...) // Python specific
-		all = append(all, moduleD()...)      // Path Traversal
-
-	default: // "all" - send everything
-		all = append(all, moduleA()...) // Extension Evasion
-		all = append(all, moduleB()...) // Content-Type & Magic Bytes
-		all = append(all, moduleD()...) // Path Traversal
-		all = append(all, moduleF()...) // Polyglot & Archive Attacks
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, modulePython()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
+	default:
+		if IsModuleEnabled(TestTypeExtensionEvasion) {
+			all = append(all, moduleA()...)
+		}
+		if IsModuleEnabled(TestTypeContentTypeSpoof) || IsModuleEnabled(TestTypeMagicByteSpoof) {
+			all = append(all, moduleB()...)
+		}
+		if IsModuleEnabled(TestTypePathTraversal) {
+			all = append(all, moduleD()...)
+		}
+		if IsModuleEnabled(TestTypePolyglotArchive) {
+			all = append(all, moduleF()...)
+		}
 	}
 
 	return all
