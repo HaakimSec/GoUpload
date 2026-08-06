@@ -57,10 +57,6 @@ func (a *App) Run() error {
 		template.ListAvailableTemplates("templates/")
 		return nil
 	}
-	if a.Config.ListModules {
-		fmt.Println(payload.ListModules())
-		return nil
-	}
 
 	// Load templates
 	templatePayloads := a.loadTemplates()

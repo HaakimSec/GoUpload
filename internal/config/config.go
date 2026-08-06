@@ -5,10 +5,20 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
 )
+
+const Version = "1.3.0"
+
+func runUpdate() error {
+	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
 
 // Config holds all parsed CLI configuration.
 type Config struct {
@@ -18,21 +28,21 @@ type Config struct {
 	Data            map[string]string
 	AllowList       []string
 	Concurrency     int
-	TechStack       string // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
-	AutoDetect      bool   // Auto-detect tech stack before testing
-	CheckOnly       bool   // Only validate target, don't run tests
-	NoValidate      bool   // Skip target validation
-	GraphQLMutation string // Custom GraphQL mutation string
-	GraphQLVariable string // GraphQL variable name for file upload
-	ModuleOverwrite bool   // Enable Node.js module overwrite payloads
-	ModulePath      string // Custom module path for overwrite
-	Template        string // Path to single template file
-	TemplateDir     string // Path to templates directory
-	ListTemplates   bool   // List available templates
-	ListModules     bool   // List available modules
+	TechStack       string   // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
+	AutoDetect      bool     // Auto-detect tech stack before testing
+	CheckOnly       bool     // Only validate target, don't run tests
+	NoValidate      bool     // Skip target validation
+	GraphQLMutation string   // Custom GraphQL mutation string
+	GraphQLVariable string   // GraphQL variable name for file upload
+	ModuleOverwrite bool     // Enable Node.js module overwrite payloads
+	ModulePath      string   // Custom module path for overwrite
+	Template        string   // Path to single template file
+	TemplateDir     string   // Path to templates directory
+	ListTemplates   bool     // List available templates
+	ListModules     bool     // List available modules
 	Modules         []string // Specific modules to run
-	OutputFormat    string // json, table (default)
-	OutputFile      string // File path for output
+	OutputFormat    string   // json, table (default)
+	OutputFile      string   // File path for output
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -60,11 +70,13 @@ func Parse() (*Config, error) {
 		templateFile    string
 		templateDir     string
 		listTemplates   bool
-	listModules     bool
-	modules         []string
-	moduleStr       string
-	outputFormat    string
-	outputFile      string
+		listModules     bool
+		modules         []string
+		moduleStr       string
+		outputFormat    string
+		outputFile      string
+		showVersion     bool
+		doUpdate        bool
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -176,11 +188,42 @@ func Parse() (*Config, error) {
 		fmt.Fprintln(os.Stderr)
 	}
 
+	flag.BoolVar(&showVersion, "v", false, "Show version and exit")
+	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
+	flag.BoolVar(&doUpdate, "update", false, "Update GoUpload to latest version")
+
 	flag.Parse()
 
 	// Parse module selection from comma-separated string
 	if moduleStr != "" {
 		modules = strings.Split(moduleStr, ",")
+	}
+
+	if showVersion {
+		fmt.Printf("GoUpload v%s\n", Version)
+		os.Exit(0)
+	}
+
+	if doUpdate {
+		fmt.Println("Updating GoUpload...")
+		runUpdate()
+		os.Exit(0)
+	}
+
+	if listModules {
+		fmt.Println("Available modules:")
+		fmt.Println("  extension       - Extension Evasion Matrix")
+		fmt.Println("  content-type    - Content-Type Spoofing")
+		fmt.Println("  magic-byte      - Magic Byte Injection")
+		fmt.Println("  filename        - Filename Obfuscation")
+		fmt.Println("  path-traversal  - Path Traversal Sequences")
+		fmt.Println("  graphql         - GraphQL File Uploads")
+		fmt.Println("  unicode         - Unicode & Encoding Vulnerabilities")
+		fmt.Println("  size-boundary   - Size Boundary Testing")
+		fmt.Println("  polyglot        - Polyglot & Archive Attacks")
+		fmt.Println("  server-config   - Server Configuration Overrides")
+		fmt.Println("  template        - Template Payloads")
+		os.Exit(0)
 	}
 
 	if url == "" {
@@ -256,8 +299,8 @@ func Parse() (*Config, error) {
 		TemplateDir:     templateDir,
 		ListTemplates:   listTemplates,
 		OutputFormat:    outputFormat,
-		ListModules:    listModules,
-		Modules:        modules,
+		ListModules:     listModules,
+		Modules:         modules,
 		OutputFile:      outputFile,
 	}, nil
 }
@@ -323,4 +366,3 @@ func parseFormData(raw string) (map[string]string, error) {
 	}
 	return data, nil
 }
-
