@@ -6,7 +6,7 @@ import "strings"
 type TestType string
 
 const (
-    TestTypeTemplate            TestType = "Template"
+	TestTypeTemplate            TestType = "Template"
 	TestTypeExtensionEvasion    TestType = "Extension Evasion"
 	TestTypeContentTypeSpoof    TestType = "Content-Type Spoof"
 	TestTypeMagicByteSpoof      TestType = "Magic Byte Spoof"
@@ -17,17 +17,20 @@ const (
 	TestTypeUnicodeEncoding     TestType = "Unicode Encoding"
 	TestTypeServerConfig        TestType = "Server Configuration"
 	TestTypeGraphQL             TestType = "GraphQL"
+	TestTypeRaceCondition       TestType = "Race Condition"
 )
 
 type Payload struct {
-	TestType    TestType
-	Technique   string
-	Filename    string
-	Extension   string
-	Body        []byte
-	ContentType string
-	Tags        []string
-	GraphQL     *GraphQLFields
+	TestType       TestType
+	Technique      string
+	Filename       string
+	TargetFilename string
+	Extension      string
+	Body           []byte
+	ContentType    string
+	Tags           []string
+	GraphQL        *GraphQLFields
+	RaceSync       bool
 }
 
 // AllPayloads generates the complete test matrix filtered by tech stack.

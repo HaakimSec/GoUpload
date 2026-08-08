@@ -99,6 +99,7 @@ func (a *App) Run() error {
 }
 
 // validateTarget checks if the target is reachable
+
 func (a *App) validateTarget() error {
 	if a.Config.NoValidate {
 		return nil
@@ -239,13 +240,13 @@ func (a *App) establishBaseline() {
 	}
 }
 
-// executeTests runs all payloads through the worker pool
 func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 	modules := groupByModule(allPayloads)
 	allResults := make([]*types.Result, 0, len(allPayloads))
 
 	moduleOrder := []payload.TestType{
 		payload.TestTypeTemplate,
+		payload.TestTypeRaceCondition,
 		payload.TestTypeExtensionEvasion,
 		payload.TestTypeContentTypeSpoof,
 		payload.TestTypeMagicByteSpoof,
@@ -258,6 +259,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 
 	moduleNames := map[payload.TestType]string{
 		payload.TestTypeTemplate:            "TEMPLATE PAYLOADS",
+		payload.TestTypeRaceCondition:       "MODULE H: Race Condition & TOCTOU Attacks",
 		payload.TestTypeExtensionEvasion:    "MODULE A: Extension Evasion Matrix",
 		payload.TestTypeContentTypeSpoof:    "MODULE B: Content-Type Spoofing",
 		payload.TestTypeMagicByteSpoof:      "MODULE B: Magic Byte Injection",
@@ -265,7 +267,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		payload.TestTypePathTraversal:       "MODULE D: Path Traversal Sequences",
 		payload.TestTypeServerConfig:        "MODULE F: Server Configuration Overrides",
 		payload.TestTypeUnicodeEncoding:     "MODULE G: Unicode & Encoding Vulnerabilities",
-		payload.TestTypeGraphQL:             "MODULE H: GraphQL File Uploads",
+		payload.TestTypeGraphQL:             "MODULE I: GraphQL File Uploads",
 	}
 
 	for _, modType := range moduleOrder {
@@ -286,7 +288,12 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		})
 		pool.SetResultHandler(output.ResultPrinter(a.Printer))
 
-		results := pool.Execute(modPayloads)
+		var results []*types.Result
+		if modType == payload.TestTypeRaceCondition {
+			results = pool.ExecuteRaceBurst(modPayloads)
+		} else {
+			results = pool.Execute(modPayloads)
+		}
 		allResults = append(allResults, results...)
 	}
 

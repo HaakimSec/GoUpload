@@ -101,6 +101,63 @@ func (p *Pool) Execute(payloads []*payload.Payload) []*types.Result {
 	return allResults
 }
 
+// ExecuteRaceBurst executes race condition payloads in synchronized bursts
+// All payloads with the same TargetFilename are sent simultaneously
+func (p *Pool) ExecuteRaceBurst(payloads []*payload.Payload) []*types.Result {
+	// Group payloads by target filename
+	groups := make(map[string][]*payload.Payload)
+	var sequential []*payload.Payload
+
+	for _, pl := range payloads {
+		if pl.RaceSync && pl.TargetFilename != "" {
+			groups[pl.TargetFilename] = append(groups[pl.TargetFilename], pl)
+		} else {
+			sequential = append(sequential, pl)
+		}
+	}
+
+	var allResults []*types.Result
+	results := make(chan *types.Result, len(payloads))
+
+	// Execute non-race payloads normally
+	for _, pl := range sequential {
+		results <- p.executeTest(pl)
+	}
+
+	// Execute race groups in synchronized bursts
+	for targetFile, group := range groups {
+		fmt.Printf("  🏃 Executing race burst for: %s (%d workers)\n", targetFile, len(group))
+
+		var wg sync.WaitGroup
+		var barrier sync.WaitGroup
+		barrier.Add(len(group))
+
+		for _, pl := range group {
+			wg.Add(1)
+			go func(pl *payload.Payload) {
+				defer wg.Done()
+
+				// All goroutines wait at the barrier
+				barrier.Done()
+				barrier.Wait() // Release simultaneously
+
+				// All execute at the same time
+				results <- p.executeTest(pl)
+			}(pl)
+		}
+
+		wg.Wait()
+	}
+
+	close(results)
+
+	for r := range results {
+		allResults = append(allResults, r)
+	}
+
+	return allResults
+}
+
 // Progress returns the current number of completed tests.
 func (p *Pool) Progress() int {
 	return int(p.progress.Load())
@@ -188,7 +245,7 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 			return r
 		}
 
-	// ── BRANCH 2: STANDARD REST MULTIPART UPLOADS ──
+		// ── BRANCH 2: STANDARD REST MULTIPART UPLOADS ──
 	} else {
 		var part io.Writer
 		var err error

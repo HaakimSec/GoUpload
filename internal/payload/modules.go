@@ -67,6 +67,12 @@ var ModuleRegistry = []ModuleInfo{
 		Enabled:     true,
 	},
 	{
+		Name:        "race-condition",
+		Description: "Race Condition & TOCTOU Testing",
+		TestType:    TestTypeRaceCondition,
+		Enabled:     true,
+	},
+	{
 		Name:        "server-config",
 		Description: "Server Configuration Overrides",
 		TestType:    TestTypeServerConfig,
@@ -107,7 +113,7 @@ func EnableModules(names []string) {
 	for i := range ModuleRegistry {
 		ModuleRegistry[i].Enabled = false
 	}
-	
+
 	// Enable only specified ones
 	for _, name := range names {
 		for i := range ModuleRegistry {

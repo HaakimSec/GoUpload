@@ -310,6 +310,78 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictSuspect
 	}
 
+	// Check 10: Race condition specific detection
+	if pl.TestType == payload.TestTypeRaceCondition {
+		lower := strings.ToLower(result.BodySnippet)
+
+		// Race condition: file overwrite confirmed with executable = VULNERABLE
+		if flagSet["file-overwrite-confirmed"] && flagSet["executable-accepted-in-race"] {
+			return VerdictVulnerable
+		}
+
+		// Race condition: concurrent access + file accepted = VULNERABLE
+		if flagSet["concurrent-access-detected"] && flagSet["race-condition-file-accepted"] {
+			return VerdictVulnerable
+		}
+
+		// Race condition: file accepted with suspicious extension = SUSPECT
+		if flagSet["race-condition-file-accepted"] && hasSuspiciousExt(pl) {
+			return VerdictSuspect
+		}
+
+		// Race condition: concurrent access alone = SUSPECT
+		if flagSet["concurrent-access-detected"] {
+			return VerdictSuspect
+		}
+		// Race condition success indicators
+		raceSuccessIndicators := []string{
+			"file uploaded",
+			"file saved",
+			"uploaded successfully",
+			"overwritten",
+			"already exists",
+			"replaced",
+			"file exists",
+		}
+		for _, indicator := range raceSuccessIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "race-condition-file-accepted")
+				break
+			}
+		}
+
+		// Concurrent access indicators
+		concurrentIndicators := []string{
+			"concurrent",
+			"already in use",
+			"locked",
+			"being used by another process",
+			"resource temporarily unavailable",
+		}
+		for _, indicator := range concurrentIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "concurrent-access-detected")
+				break
+			}
+		}
+
+		// File overwrite confirmation
+		if strings.Contains(lower, "overwrite") ||
+			strings.Contains(lower, "replace") ||
+			strings.Contains(lower, "already exists") {
+			flags = append(flags, "file-overwrite-confirmed")
+		}
+
+		// Executable accepted in race window
+		if result.StatusCode == 200 || result.StatusCode == 201 {
+			if strings.Contains(pl.Filename, ".php") ||
+				strings.Contains(pl.Filename, ".jsp") ||
+				strings.Contains(pl.Filename, ".asp") {
+				flags = append(flags, "executable-accepted-in-race")
+			}
+		}
+	}
+
 	// Fall back to HTTP status check for standard modules
 	if !isSuccessStatus(result.StatusCode) {
 		return VerdictSafe
@@ -364,6 +436,10 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		"status-matches-baseline",
 		"json-indicates-success",
 		"filename-reflected-in-response",
+		"race-condition-file-accepted",
+		"concurrent-access-detected",
+		"file-overwrite-confirmed",
+		"executable-accepted-in-race",
 		"html-indicates-success",
 		"filepath-disclosed",
 		"image-upload-accepted",
@@ -488,4 +564,3 @@ func (s SummaryStats) String() string {
 	return fmt.Sprintf("Total: %d | Safe: %d | Suspect: %d | Vulnerable: %d | Errors: %d | Avg: %.3fs",
 		s.Total, s.Safe, s.Suspect, s.Vulnerable, s.Errors, s.Duration)
 }
-
