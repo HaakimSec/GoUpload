@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/HaakimSec/GoUpload/internal/config"
+	"github.com/HaakimSec/GoUpload/internal/discovery"
 	"github.com/HaakimSec/GoUpload/internal/fingerprint"
 	"github.com/HaakimSec/GoUpload/internal/oracle"
 	"github.com/HaakimSec/GoUpload/internal/output"
@@ -38,6 +40,9 @@ func New(cfg *config.Config) *App {
 
 // Run executes the main application logic
 func (a *App) Run() error {
+	if a.Config.DiscoverMode {
+		return a.discoverUploadForms()
+	}
 	// Validate target
 	if err := a.validateTarget(); err != nil {
 		return err
@@ -96,6 +101,24 @@ func (a *App) Run() error {
 
 	// Exit code
 	return a.getExitError(stats)
+}
+
+func (a *App) discoverUploadForms() error {
+	fmt.Fprintf(os.Stderr, "  🔍 Discovering upload forms on %s...\n", a.Config.URL)
+
+	// Create an HTTP client with cookie jar support
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	parser := discovery.NewHTMLFormParser(client)
+	result, err := parser.DiscoverFromURL(a.Config.URL, a.Config.Headers)
+	if err != nil {
+		return err
+	}
+
+	output.PrintDiscoveryResults(result)
+	return nil
 }
 
 // validateTarget checks if the target is reachable

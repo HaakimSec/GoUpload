@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const Version = "1.4.0"
+const Version = "1.5.0"
 
 func runUpdate() error {
 	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
@@ -43,6 +43,7 @@ type Config struct {
 	Modules         []string // Specific modules to run
 	OutputFormat    string   // json, table (default)
 	OutputFile      string   // File path for output
+	DiscoverMode    bool     // Discover upload forms on a page
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -75,6 +76,7 @@ func Parse() (*Config, error) {
 		moduleStr       string
 		outputFormat    string
 		outputFile      string
+		discoverMode    bool
 		showVersion     bool
 		doUpdate        bool
 	)
@@ -108,6 +110,7 @@ func Parse() (*Config, error) {
 	flag.StringVar(&moduleStr, "m", "", "Run specific modules (shorthand)")
 	flag.StringVar(&outputFormat, "output", "table", "Output format: table, json")
 	flag.StringVar(&outputFile, "output-file", "", "Save output to file")
+	flag.BoolVar(&discoverMode, "discover", false, "Discover upload forms on target page")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -146,7 +149,7 @@ func Parse() (*Config, error) {
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, "   v1.4.0  │  Built for Security Professionals  │  @haakimsec")
+		version.Fprintln(os.Stderr, "   v1.5.0  │  Built for Security Professionals  │  @haakimsec")
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -302,6 +305,7 @@ func Parse() (*Config, error) {
 		ListModules:     listModules,
 		Modules:         modules,
 		OutputFile:      outputFile,
+		DiscoverMode:    discoverMode,
 	}, nil
 }
 
