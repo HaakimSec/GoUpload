@@ -84,6 +84,12 @@ var ModuleRegistry = []ModuleInfo{
 		TestType:    TestTypeTemplate,
 		Enabled:     true,
 	},
+	{
+		Name:        "xxe",
+		Description: "XXE Injection via File Upload",
+		TestType:    TestTypeXXE,
+		Enabled:     true,
+	},
 }
 
 // GetModuleByName returns a module by its name
@@ -154,3 +160,4 @@ func ListModules() string {
 	}
 	return result
 }
+

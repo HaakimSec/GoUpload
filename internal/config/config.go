@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const Version = "1.5.0"
+const Version = "1.4.0"
 
 func runUpdate() error {
 	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
@@ -106,11 +106,11 @@ func Parse() (*Config, error) {
 	flag.StringVar(&templateDir, "templates-dir", "", "Path to templates directory")
 	flag.BoolVar(&listTemplates, "list-templates", false, "List available templates")
 	flag.BoolVar(&listModules, "list-modules", false, "List available modules and exit")
-	flag.StringVar(&moduleStr, "module", "", "Run specific modules: extension,content-type,magic-byte,filename,path-traversal,graphql,unicode,template,size-boundary,race-condition,polyglot,server-config")
 	flag.StringVar(&moduleStr, "m", "", "Run specific modules (shorthand)")
 	flag.StringVar(&outputFormat, "output", "table", "Output format: table, json")
 	flag.StringVar(&outputFile, "output-file", "", "Save output to file")
 	flag.BoolVar(&discoverMode, "discover", false, "Discover upload forms on target page")
+	flag.StringVar(&moduleStr, "module", "", "Run specific modules: extension,content-type,magic-byte,filename,path-traversal,graphql,unicode,template,size-boundary,race-condition,polyglot,xxe,server-config")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -149,7 +149,7 @@ func Parse() (*Config, error) {
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, "   v1.5.0  │  Built for Security Professionals  │  @haakimsec")
+		version.Fprintln(os.Stderr, "   v1.4.0  │  Built for Security Professionals  │  @haakimsec")
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -224,6 +224,7 @@ func Parse() (*Config, error) {
 		fmt.Println("  unicode         - Unicode & Encoding Vulnerabilities")
 		fmt.Println("  size-boundary   - Size Boundary Testing")
 		fmt.Println("  race-condition  - Race Condition & TOCTOU Testing\n  polyglot        - Polyglot & Archive Attacks")
+		fmt.Println("  xxe             - XXE Injection via File Upload")
 		fmt.Println("  server-config   - Server Configuration Overrides")
 		fmt.Println("  template        - Template Payloads")
 		os.Exit(0)
@@ -370,3 +371,4 @@ func parseFormData(raw string) (map[string]string, error) {
 	}
 	return data, nil
 }
+

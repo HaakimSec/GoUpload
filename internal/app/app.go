@@ -278,6 +278,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		payload.TestTypeServerConfig,
 		payload.TestTypeUnicodeEncoding,
 		payload.TestTypeGraphQL,
+		payload.TestTypeXXE,
 	}
 
 	moduleNames := map[payload.TestType]string{
@@ -291,6 +292,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		payload.TestTypeServerConfig:        "MODULE F: Server Configuration Overrides",
 		payload.TestTypeUnicodeEncoding:     "MODULE G: Unicode & Encoding Vulnerabilities",
 		payload.TestTypeGraphQL:             "MODULE I: GraphQL File Uploads",
+		payload.TestTypeXXE:                 "MODULE J: XXE Injection via File Upload",
 	}
 
 	for _, modType := range moduleOrder {

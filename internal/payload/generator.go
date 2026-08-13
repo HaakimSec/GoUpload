@@ -18,6 +18,7 @@ const (
 	TestTypeServerConfig        TestType = "Server Configuration"
 	TestTypeGraphQL             TestType = "GraphQL"
 	TestTypeRaceCondition       TestType = "Race Condition"
+	TestTypeXXE                 TestType = "XXE Injection"
 )
 
 type Payload struct {
@@ -55,6 +56,9 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	}
 	if IsModuleEnabled(TestTypeExtensionEvasion) {
 		all = append(all, moduleGraphQL()...)
+	}
+	if IsModuleEnabled(TestTypeXXE) {
+		all = append(all, moduleXXE()...)
 	}
 
 	switch strings.ToLower(techStack) {

@@ -382,6 +382,34 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		}
 	}
 
+	// Check 11: XXE detection
+	if pl.TestType == payload.TestTypeXXE {
+		lower := strings.ToLower(result.BodySnippet)
+
+		// XXE success indicators (file content disclosure)
+		xxeSuccessIndicators := []string{
+			"root:",
+			"daemon:",
+			"bin:",
+			"for 16-bit app support",
+			"[extensions]",
+			"aws_access_key_id",
+			"aws_secret_access_key",
+			"<?xml",
+		}
+		for _, indicator := range xxeSuccessIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "xxe-file-disclosure")
+				break
+			}
+		}
+
+		// Billion laughs DoS indicator
+		if strings.Contains(lower, "lol") || strings.Contains(lower, "entity") {
+			flags = append(flags, "xxe-entity-expansion")
+		}
+	}
+
 	// Fall back to HTTP status check for standard modules
 	if !isSuccessStatus(result.StatusCode) {
 		return VerdictSafe
@@ -564,3 +592,4 @@ func (s SummaryStats) String() string {
 	return fmt.Sprintf("Total: %d | Safe: %d | Suspect: %d | Vulnerable: %d | Errors: %d | Avg: %.3fs",
 		s.Total, s.Safe, s.Suspect, s.Vulnerable, s.Errors, s.Duration)
 }
+
