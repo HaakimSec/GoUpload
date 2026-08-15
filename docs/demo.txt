@@ -1,0 +1,76 @@
+Script started on 2026-08-15 18:21:49+03:00 [COMMAND="cd ~/projects/GoUpload/Goupload && ./GoUpload -u http://localhost:8080/api/upload/unrestricted -p file --module xxe --allow-list .txt,.jpg --no-validate" TERM="xterm-256color" TTY="/dev/pts/0" COLUMNS="168" LINES="44"]
+  🎯 Running modules: xxe
+
+
+[31;1m   ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ [0;22m
+[33;1m  ██╔════╝ ██╔═══██╗██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗[0;22m
+[32;1m  ██║  ███╗██║   ██║██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║[0;22m
+[36;1m  ██║   ██║██║   ██║██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║[0;22m
+[34;1m  ╚██████╔╝╚██████╔╝╚██████╔╝██║     ███████╗╚██████╔╝██║  ██║██████╔╝[0;22m
+[35;1m   ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ [0;22m
+
+[33;1m   ⚡ [0m[37;1mWeb Application File Upload Security Tester[0m[33;1m ⚡[0;22m
+
+[97;2m   v1.0.0  │  Built for Security Professionals  │  @haakimsec[0;22m
+
+[37;2m  ╔══════════════════════════════════════════════════════════════════╗[0;22m
+  ║  [36;1m🎯 Target URL    [0m[37m: http://localhost:8080/api/upload/unrestricted       [0m║
+  ║  [36;1m📦 Upload Param  [0m[37m: file                                                [0m║
+  ║  [36;1m🚀 Concurrency   [0m[37m: 10                                                  [0m║
+  ║  [36;1m🧪 Test Payloads [0m[37m: 12                                                  [0m║
+[37;2m  ╚══════════════════════════════════════════════════════════════════╝[0;22m
+
+[37;2m  ────────────────────────────────────────────────────────────────────────[0;22m
+  Establishing baseline with extension .txt...
+[33;1m  [BASELINE] Establishing upload baseline...[0;22m
+
+    Filename:          baseline_test.txt
+    Status Code:       [32m200 OK[0m
+    Response Length:   156 bytes
+    Content-Type:      application/json; charset=utf-8
+
+[37;2m  ────────────────────────────────────────────────────────────────────────[0;22m
+
+[33;1m  ┌─ MODULE J: XXE Injection via File Upload
+[0m[33;1m  │[0;22m
+  [32m█░░░░░░░░░░░░░░░░░░░[0m [8%] 1/12 (77ms)                                    [32m███░░░░░░░░░░░░░░░░░[0m [17%] 2/12 (121ms)                                    [32m█████░░░░░░░░░░░░░░░[0m [25%] 3/12 (121ms)                                    [32m██████░░░░░░░░░░░░░░[0m [33%] 4/12 (121ms)                                    [32m████████░░░░░░░░░░░░[0m [42%] 5/12 (121ms)                                    [32m██████████░░░░░░░░░░[0m [50%] 6/12 (121ms)                                    [32m███████████░░░░░░░░░[0m [58%] 7/12 (121ms)                                    [32m█████████████░░░░░░░[0m [67%] 8/12 (121ms)                                    [32m███████████████░░░░░[0m [75%] 9/12 (121ms)                                    [32m████████████████░░░░[0m [83%] 10/12 (121ms)                                    [32m██████████████████░░[0m [92%] 11/12 (121ms)                                    [32m████████████████████[0m [100%] 12/12 (126ms)                                  
+
+[36;1m  MODULE J: XXE Injection via File Upload
+[0m
+[90m  ┌────┬──────────────────────────────────────┬───────────┬────────┬───────┬───────┐[0m
+[90m  │ ID │ Payload                              │ Verdict   │ Status │ Time  │ Flags │[0m
+[90m  ├────┼──────────────────────────────────────┼───────────┼────────┼───────┼───────┤[0m
+  │ 01 │ XXE via XML: Billion Laughs DoS…     │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 12.83 │ 5     │
+  │ 02 │ XXE via SVG: SSRF to AWS metadata    │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 20.55 │ 5     │
+  │ 03 │ XXE via SVG: Read /etc/hosts         │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 19.94 │ 4     │
+  │ 04 │ XXE via SVG: Read Windows win.ini    │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 25.13 │ 5     │
+  │ 05 │ XXE via SVG: SSRF to localhost       │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 17.85 │ 5     │
+  │ 06 │ XXE via SVG: Out-of-band parameter…  │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 18.92 │ 5     │
+  │ 07 │ XXE via XML: Direct file read        │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 18.48 │ 5     │
+  │ 08 │ XXE via DOCX: Embedded XXE in…       │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 17.11 │ 5     │
+  │ 09 │ XXE via XLSX: Embedded XXE in…       │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 7.939 │ 5     │
+  │ 10 │ XXE via JPEG: XXE in XMP metadata    │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 7.778 │ 5     │
+  │ 11 │ XXE via SVG: Read /etc/passwd        │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 45.12 │ 4     │
+  │ 12 │ XXE via XML: SSRF to cloud metadata  │ [31;1mVULNERABLE[0;22m │ [32m200[0m │ 56.83 │ 5     │
+[90m  └────┴──────────────────────────────────────┴───────────┴────────┴───────┴───────┘[0m
+
+
+[37;2m  ────────────────────────────────────────────────────────────────────────[0;22m
+[36;1m  SUMMARY[0;22m
+
+    Total Tests:           12
+    Safe:                  [32m0[0m
+    Suspect:               [33;1m0[0;22m
+    Vulnerable:            [31;1m12[0;22m
+    Errors:                [35m0[0m
+    Avg Response Time:     0.022s
+    Total Elapsed:         127ms
+
+[31;1m  ⚠  Potential vulnerabilities detected — manual verification recommended![0;22m
+
+[37;2m  ────────────────────────────────────────────────────────────────────────[0;22m
+
+[36m  💡 Tip: Use --auto-detect to fingerprint the target and reduce payloads.[0m
+[36m     Example: GoUpload -u http://localhost:8080/api/upload/unrestricted -p file --auto-detect
+[0m
+Script done on 2026-08-15 18:21:50+03:00 [COMMAND_EXIT_CODE="1"]

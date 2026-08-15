@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const Version = "1.4.0"
+const Version = "1.7.0"
 
 func runUpdate() error {
 	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
@@ -149,7 +149,7 @@ func Parse() (*Config, error) {
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, "   v1.4.0  │  Built for Security Professionals  │  @haakimsec")
+		version.Fprintln(os.Stderr, " Built for Security Professionals  │  @haakimsec")
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -371,4 +371,3 @@ func parseFormData(raw string) (map[string]string, error) {
 	}
 	return data, nil
 }
-

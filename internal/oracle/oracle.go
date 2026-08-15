@@ -109,7 +109,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
-	// Check 5b: HTML success patterns (for labs and legacy apps)
+	// Check 5b: HTML success patterns
 	if result.BodySnippet != "" {
 		lower := strings.ToLower(result.BodySnippet)
 		htmlSuccessPatterns := []string{
@@ -156,7 +156,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			}
 		}
 
-		// Check 5d: Generic success keywords combined with file reflection
+		// Check 5d: Generic success keywords
 		genericSuccessWords := []string{"success", "succeeded", "completed"}
 		for _, word := range genericSuccessWords {
 			if strings.Contains(lower, word) && isSuspiciousExt {
@@ -166,7 +166,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
-	// Check 6: Content-Type spoofing specific checks
+	// Check 6: Content-Type spoofing
 	if pl.TestType == payload.TestTypeContentTypeSpoof || pl.TestType == payload.TestTypeMagicByteSpoof {
 		if statusOK && isSuspiciousExt {
 			flags = append(flags, "spoofed-content-accepted")
@@ -243,31 +243,103 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 	if pl.GraphQL != nil {
 		lower := strings.ToLower(result.BodySnippet)
 
-		// Check for GraphQL success
 		if strings.Contains(lower, `"data":{`) || strings.Contains(lower, `"data": {`) {
 			flags = append(flags, "graphql-mutation-accepted")
 
-			// Check if it returned expected fields
 			if strings.Contains(lower, `"__typename"`) || strings.Contains(lower, `"resumeid"`) {
 				flags = append(flags, "graphql-expected-response")
 			}
 		}
 
-		// Check for GraphQL errors
 		if strings.Contains(lower, `"errors":[{`) || strings.Contains(lower, `"errors": [{"`) {
 			flags = append(flags, "graphql-errors-returned")
 		}
 
-		// Check for stack traces (info disclosure!)
 		if strings.Contains(lower, "/home/") || strings.Contains(lower, "/var/www/") {
 			flags = append(flags, "graphql-stack-trace-disclosed")
 		}
 
-		// Check for Node.js specific errors
 		if strings.Contains(lower, "cannot find module") ||
 			strings.Contains(lower, "require(") ||
 			strings.Contains(lower, "node_modules") {
 			flags = append(flags, "nodejs-module-error-disclosed")
+		}
+	}
+
+	// Check 10: Race condition specific detection (SET FLAGS HERE)
+	if pl.TestType == payload.TestTypeRaceCondition {
+		lower := strings.ToLower(result.BodySnippet)
+
+		raceSuccessIndicators := []string{
+			"file uploaded",
+			"file saved",
+			"uploaded successfully",
+			"overwritten",
+			"already exists",
+			"replaced",
+			"file exists",
+		}
+		for _, indicator := range raceSuccessIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "race-condition-file-accepted")
+				break
+			}
+		}
+
+		concurrentIndicators := []string{
+			"concurrent",
+			"already in use",
+			"locked",
+			"being used by another process",
+			"resource temporarily unavailable",
+		}
+		for _, indicator := range concurrentIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "concurrent-access-detected")
+				break
+			}
+		}
+
+		if strings.Contains(lower, "overwrite") ||
+			strings.Contains(lower, "replace") ||
+			strings.Contains(lower, "already exists") {
+			flags = append(flags, "file-overwrite-confirmed")
+		}
+
+		if result.StatusCode == 200 || result.StatusCode == 201 {
+			if strings.Contains(pl.Filename, ".php") ||
+				strings.Contains(pl.Filename, ".jsp") ||
+				strings.Contains(pl.Filename, ".asp") {
+				flags = append(flags, "executable-accepted-in-race")
+			}
+		}
+	}
+
+	// Check 11: XXE detection (SET FLAGS HERE)
+	if pl.TestType == payload.TestTypeXXE {
+		lower := strings.ToLower(result.BodySnippet)
+
+		if result.StatusCode == 200 &&
+			(strings.Contains(lower, "success") || strings.Contains(lower, "uploaded")) {
+			flags = append(flags, "xxe-file-accepted")
+		}
+
+		xxeSuccessIndicators := []string{
+			"root:", "daemon:", "bin:",
+			"for 16-bit app support",
+			"[extensions]",
+			"aws_access_key_id",
+			"<?xml",
+		}
+		for _, indicator := range xxeSuccessIndicators {
+			if strings.Contains(lower, indicator) {
+				flags = append(flags, "xxe-file-disclosure")
+				break
+			}
+		}
+
+		if strings.Contains(lower, "lol") || strings.Contains(lower, "entity") {
+			flags = append(flags, "xxe-entity-expansion")
 		}
 	}
 
@@ -290,7 +362,7 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		flagSet[f] = true
 	}
 
-	// GraphQL Validation Safeguard: If validation failed, the file was rejected
+	// GraphQL Validation Safeguard
 	if flagSet["graphql-validation-error"] {
 		return VerdictSafe
 	}
@@ -300,117 +372,52 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictVulnerable
 	}
 
-	// GraphQL stack trace disclosed = VULNERABLE (info disclosure)
+	// GraphQL stack trace disclosed = VULNERABLE
 	if flagSet["graphql-stack-trace-disclosed"] {
 		return VerdictVulnerable
 	}
 
-	// Node.js module error disclosed = SUSPECT (potential path traversal success)
+	// Node.js module error disclosed = SUSPECT
 	if flagSet["nodejs-module-error-disclosed"] {
 		return VerdictSuspect
 	}
 
-	// Check 10: Race condition specific detection
-	if pl.TestType == payload.TestTypeRaceCondition {
-		lower := strings.ToLower(result.BodySnippet)
-
-		// Race condition: file overwrite confirmed with executable = VULNERABLE
-		if flagSet["file-overwrite-confirmed"] && flagSet["executable-accepted-in-race"] {
-			return VerdictVulnerable
-		}
-
-		// Race condition: concurrent access + file accepted = VULNERABLE
-		if flagSet["concurrent-access-detected"] && flagSet["race-condition-file-accepted"] {
-			return VerdictVulnerable
-		}
-
-		// Race condition: file accepted with suspicious extension = SUSPECT
-		if flagSet["race-condition-file-accepted"] && hasSuspiciousExt(pl) {
-			return VerdictSuspect
-		}
-
-		// Race condition: concurrent access alone = SUSPECT
-		if flagSet["concurrent-access-detected"] {
-			return VerdictSuspect
-		}
-		// Race condition success indicators
-		raceSuccessIndicators := []string{
-			"file uploaded",
-			"file saved",
-			"uploaded successfully",
-			"overwritten",
-			"already exists",
-			"replaced",
-			"file exists",
-		}
-		for _, indicator := range raceSuccessIndicators {
-			if strings.Contains(lower, indicator) {
-				flags = append(flags, "race-condition-file-accepted")
-				break
-			}
-		}
-
-		// Concurrent access indicators
-		concurrentIndicators := []string{
-			"concurrent",
-			"already in use",
-			"locked",
-			"being used by another process",
-			"resource temporarily unavailable",
-		}
-		for _, indicator := range concurrentIndicators {
-			if strings.Contains(lower, indicator) {
-				flags = append(flags, "concurrent-access-detected")
-				break
-			}
-		}
-
-		// File overwrite confirmation
-		if strings.Contains(lower, "overwrite") ||
-			strings.Contains(lower, "replace") ||
-			strings.Contains(lower, "already exists") {
-			flags = append(flags, "file-overwrite-confirmed")
-		}
-
-		// Executable accepted in race window
-		if result.StatusCode == 200 || result.StatusCode == 201 {
-			if strings.Contains(pl.Filename, ".php") ||
-				strings.Contains(pl.Filename, ".jsp") ||
-				strings.Contains(pl.Filename, ".asp") {
-				flags = append(flags, "executable-accepted-in-race")
-			}
-		}
+	// XXE: file accepted with XXE payload = VULNERABLE
+	if flagSet["xxe-file-accepted"] {
+		return VerdictVulnerable
 	}
 
-	// Check 11: XXE detection
-	if pl.TestType == payload.TestTypeXXE {
-		lower := strings.ToLower(result.BodySnippet)
-
-		// XXE success indicators (file content disclosure)
-		xxeSuccessIndicators := []string{
-			"root:",
-			"daemon:",
-			"bin:",
-			"for 16-bit app support",
-			"[extensions]",
-			"aws_access_key_id",
-			"aws_secret_access_key",
-			"<?xml",
-		}
-		for _, indicator := range xxeSuccessIndicators {
-			if strings.Contains(lower, indicator) {
-				flags = append(flags, "xxe-file-disclosure")
-				break
-			}
-		}
-
-		// Billion laughs DoS indicator
-		if strings.Contains(lower, "lol") || strings.Contains(lower, "entity") {
-			flags = append(flags, "xxe-entity-expansion")
-		}
+	// XXE: file content disclosed = VULNERABLE
+	if flagSet["xxe-file-disclosure"] {
+		return VerdictVulnerable
 	}
 
-	// Fall back to HTTP status check for standard modules
+	// XXE: entity expansion = SUSPECT
+	if flagSet["xxe-entity-expansion"] {
+		return VerdictSuspect
+	}
+
+	// Race condition: file overwrite confirmed with executable = VULNERABLE
+	if flagSet["file-overwrite-confirmed"] && flagSet["executable-accepted-in-race"] {
+		return VerdictVulnerable
+	}
+
+	// Race condition: concurrent access + file accepted = VULNERABLE
+	if flagSet["concurrent-access-detected"] && flagSet["race-condition-file-accepted"] {
+		return VerdictVulnerable
+	}
+
+	// Race condition: file accepted with suspicious extension = SUSPECT
+	if flagSet["race-condition-file-accepted"] && hasSuspiciousExt(pl) {
+		return VerdictSuspect
+	}
+
+	// Race condition: concurrent access alone = SUSPECT
+	if flagSet["concurrent-access-detected"] {
+		return VerdictSuspect
+	}
+
+	// Fall back to HTTP status check
 	if !isSuccessStatus(result.StatusCode) {
 		return VerdictSafe
 	}
@@ -425,23 +432,23 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Content-type spoof accepted with success indicators
+	// HIGH CONFIDENCE: Content-type spoof accepted
 	if flagSet["content-type-spoof-accepted"] &&
 		(flagSet["html-indicates-success"] || flagSet["filename-reflected-in-response"]) {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Traversal accepted with file error disclosure
+	// HIGH CONFIDENCE: Traversal accepted with file error
 	if flagSet["traversal-filename-accepted"] && flagSet["filesystem-error-disclosed"] {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Image upload with executable content accepted
+	// HIGH CONFIDENCE: Image upload with executable
 	if flagSet["image-upload-accepted"] && hasSuspiciousExt(pl) {
 		return VerdictVulnerable
 	}
 
-	// EXIF data processed with image upload = VULNERABLE
+	// EXIF data processed
 	if flagSet["exif-data-processed"] && flagSet["image-upload-accepted"] {
 		return VerdictVulnerable
 	}
@@ -473,6 +480,8 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		"image-upload-accepted",
 		"graphql-mutation-accepted",
 		"graphql-expected-response",
+		"xxe-file-accepted",
+		"xxe-file-disclosure",
 	}
 	supportCount := 0
 	for _, sf := range supportingFlags {
@@ -592,4 +601,3 @@ func (s SummaryStats) String() string {
 	return fmt.Sprintf("Total: %d | Safe: %d | Suspect: %d | Vulnerable: %d | Errors: %d | Avg: %.3fs",
 		s.Total, s.Safe, s.Suspect, s.Vulnerable, s.Errors, s.Duration)
 }
-

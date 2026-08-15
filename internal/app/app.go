@@ -325,19 +325,58 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 	return allResults
 }
 
-// printResults displays flagged findings
+// printResults displays flagged findings in table format
 func (a *App) printResults(allResults []*types.Result) {
-	flagged := collectFlagged(allResults)
-	if len(flagged) > 0 {
-		color.New(color.FgRed, color.Bold).Fprintf(os.Stderr, "\n  ⚠  FLAGGED RESULTS (%d items)\n", len(flagged))
-		output.PrintSeparatorFunc()
-		fmt.Println()
+	modules := groupResultsByType(allResults)
 
-		for i, r := range flagged {
-			a.Printer.PrintFinalResult(r, i+1)
+	moduleOrder := []payload.TestType{
+		payload.TestTypeRaceCondition,
+		payload.TestTypeXXE,
+		payload.TestTypeGraphQL,
+		payload.TestTypePathTraversal,
+		payload.TestTypeExtensionEvasion,
+		payload.TestTypeContentTypeSpoof,
+		payload.TestTypeMagicByteSpoof,
+		payload.TestTypeFilenameObfuscation,
+		payload.TestTypeServerConfig,
+		payload.TestTypeUnicodeEncoding,
+		payload.TestTypeTemplate,
+	}
+
+	moduleNames := map[payload.TestType]string{
+		payload.TestTypeRaceCondition:       "RACE CONDITION MODULE",
+		payload.TestTypeXXE:                 "XXE MODULE",
+		payload.TestTypeGraphQL:             "GRAPHQL MODULE",
+		payload.TestTypePathTraversal:       "PATH TRAVERSAL MODULE",
+		payload.TestTypeExtensionEvasion:    "EXTENSION EVASION MODULE",
+		payload.TestTypeContentTypeSpoof:    "CONTENT-TYPE SPOOFING MODULE",
+		payload.TestTypeMagicByteSpoof:      "MAGIC BYTE MODULE",
+		payload.TestTypeFilenameObfuscation: "FILENAME OBFUSCATION MODULE",
+		payload.TestTypeServerConfig:        "SERVER CONFIG MODULE",
+		payload.TestTypeUnicodeEncoding:     "UNICODE MODULE",
+		payload.TestTypeTemplate:            "TEMPLATE MODULE",
+	}
+
+	for _, modType := range moduleOrder {
+		results, ok := modules[modType]
+		if !ok || len(results) == 0 {
+			continue
 		}
 
-		fmt.Fprintln(color.Output, "  └─────────────────────────────────────────────────────────────────")
+		// Filter flagged results
+		var flagged []*types.Result
+		for _, r := range results {
+			if r.Vulnerable != string(oracle.VerdictSafe) && r.Vulnerable != "" {
+				flagged = append(flagged, r)
+			}
+		}
+
+		if len(flagged) > 0 {
+			// Executive summary
+			output.PrintExecutiveSummary(moduleNames[modType], flagged)
+			// Findings table
+			output.PrintFindingsTable(moduleNames[modType], flagged)
+		}
 	}
 }
 
@@ -445,4 +484,13 @@ func mapLanguageToTechStack(language string) string {
 	default:
 		return "all"
 	}
+}
+
+// groupResultsByType organizes results by their test type
+func groupResultsByType(results []*types.Result) map[payload.TestType][]*types.Result {
+	groups := make(map[payload.TestType][]*types.Result)
+	for _, r := range results {
+		groups[r.TestType] = append(groups[r.TestType], r)
+	}
+	return groups
 }

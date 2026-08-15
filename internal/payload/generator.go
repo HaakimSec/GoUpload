@@ -60,6 +60,9 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	if IsModuleEnabled(TestTypeXXE) {
 		all = append(all, moduleXXE()...)
 	}
+	if IsModuleEnabled(TestTypeRaceCondition) {
+		all = append(all, moduleRace()...)
+	}
 
 	switch strings.ToLower(techStack) {
 	case "php":
@@ -336,4 +339,3 @@ func modulePython() []*Payload {
 
 	return tests
 }
-
