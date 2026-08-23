@@ -54,7 +54,7 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	if IsModuleEnabled(TestTypeUnicodeEncoding) {
 		all = append(all, moduleG()...)
 	}
-	if IsModuleEnabled(TestTypeExtensionEvasion) {
+	if IsModuleEnabled(TestTypeGraphQL) {
 		all = append(all, moduleGraphQL()...)
 	}
 	if IsModuleEnabled(TestTypeXXE) {

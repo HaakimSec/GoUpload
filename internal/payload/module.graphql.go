@@ -267,7 +267,7 @@ func moduleGraphQL() []*Payload {
 		mapJSON, _ := json.Marshal(gqlMap)
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypeMagicByteSpoof,
+			TestType:  TestTypeGraphQL,
 			Technique: mt.name,
 			Filename:  "gql_magic" + mt.ext,
 			Extension: mt.ext,
@@ -303,7 +303,7 @@ func moduleGraphQL() []*Payload {
 		mapJSON, _ := json.Marshal(gqlMap)
 
 		tests = append(tests, &Payload{
-			TestType:  TestTypePathTraversal,
+			TestType:  TestTypeGraphQL,
 			Technique: tt.technique,
 			Filename:  tt.filename,
 			Extension: ".php",
@@ -508,7 +508,7 @@ module.exports = function() { return "clean"; };
 			mapJSON, _ := json.Marshal(gqlMap)
 
 			tests = append(tests, &Payload{
-				TestType:  TestTypePathTraversal,
+				TestType:  TestTypeGraphQL,
 				Technique: "Module overwrite: " + mt.technique,
 				Filename:  mt.path,
 				Extension: ".js",
@@ -525,4 +525,3 @@ module.exports = function() { return "clean"; };
 
 	return tests
 }
-
