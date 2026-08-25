@@ -3,11 +3,12 @@ package output
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/HaakimSec/GoUpload/internal/oracle"
-	"github.com/HaakimSec/GoUpload/internal/types"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/HaakimSec/GoUpload/internal/oracle"
+	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
 // JSONReport represents the complete scan report in JSON format
@@ -37,18 +38,22 @@ type JSONSummary struct {
 
 // JSONFinding represents a single vulnerability finding
 type JSONFinding struct {
-	ID             int      `json:"id"`
-	Module         string   `json:"module"`
-	Technique      string   `json:"technique"`
-	Filename       string   `json:"filename"`
-	Extension      string   `json:"extension"`
-	Verdict        string   `json:"verdict"`
-	Confidence     int      `json:"confidence_percent"`
-	StatusCode     int      `json:"status_code"`
-	ResponseLength int      `json:"response_length_bytes"`
-	Duration       string   `json:"duration"`
-	Flags          []string `json:"flags"`
-	Error          string   `json:"error,omitempty"`
+	ID              int               `json:"id"`
+	Module          string            `json:"module"`
+	Technique       string            `json:"technique"`
+	Filename        string            `json:"filename"`
+	Extension       string            `json:"extension"`
+	Verdict         string            `json:"verdict"`
+	Confidence      int               `json:"confidence_percent"`
+	StatusCode      int               `json:"status_code"`
+	ResponseLength  int               `json:"response_length_bytes"`
+	Duration        string            `json:"duration"`
+	Flags           []string          `json:"flags"`
+	Error           string            `json:"error,omitempty"`
+	ResponseBody    string            `json:"response_body,omitempty"`
+	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	FinalFilename   string            `json:"final_filename,omitempty"`
+	Sanitized       bool              `json:"sanitized"`
 }
 
 // JSONMetadata contains scan metadata
@@ -106,17 +111,21 @@ func (jp *JSONPrinter) AddFinding(r *types.Result, moduleName string, id int) {
 	confidence := calculateConfidence(r.Flags, r.Vulnerable)
 
 	finding := JSONFinding{
-		ID:             id,
-		Module:         moduleName,
-		Technique:      r.Technique,
-		Filename:       r.Filename,
-		Extension:      extractExtensionFromFilename(r.Filename),
-		Verdict:        r.Vulnerable,
-		Confidence:     confidence,
-		StatusCode:     r.StatusCode,
-		ResponseLength: r.RespLen,
-		Duration:       r.Duration.String(),
-		Flags:          r.Flags,
+		ID:              id,
+		Module:          moduleName,
+		Technique:       r.Technique,
+		Filename:        r.Filename,
+		Extension:       extractExtensionFromFilename(r.Filename),
+		Verdict:         r.Vulnerable,
+		Confidence:      confidence,
+		StatusCode:      r.StatusCode,
+		ResponseLength:  r.RespLen,
+		Duration:        r.Duration.String(),
+		Flags:           r.Flags,
+		ResponseBody:    truncateString(r.ResponseBody, 500),
+		ResponseHeaders: r.ResponseHeaders,
+		FinalFilename:   r.FinalFilename,
+		Sanitized:       r.Sanitized,
 	}
 
 	if r.Err != nil {
@@ -124,6 +133,14 @@ func (jp *JSONPrinter) AddFinding(r *types.Result, moduleName string, id int) {
 	}
 
 	jp.report.Findings = append(jp.report.Findings, finding)
+}
+
+// truncateString is OUTSIDE AddFinding - at package level
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen]
 }
 
 // SetSummary sets the scan summary

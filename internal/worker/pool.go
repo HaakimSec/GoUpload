@@ -332,7 +332,21 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 		r.BodySnippet = string(bodyBytes)
 	}
 
+	r.ResponseBody = string(bodyBytes)
+
+	r.ResponseHeaders = make(map[string]string)
+	for key, values := range resp.Header {
+		if len(values) > 0 {
+			r.ResponseHeaders[key] = values[0]
+		}
+	}
+
+	r.Sanitized = detectSanitization(r.Filename, r.ResponseBody, r.ResponseHeaders)
+
+	r.FinalFilename = extractFinalFilename(r.ResponseBody)
+
 	// Run oracle analysis
+
 	if p.config.Baseline != nil {
 		verdict := oracle.Analyze(p.config.Baseline, r, pl)
 		r.Vulnerable = string(verdict.Verdict)
@@ -402,4 +416,71 @@ func BaselineUpload(url, param string, headers, data map[string]string, allowLis
 		BodySnippet:    string(respBody),
 		Filename:       filename,
 	}, nil
+}
+
+// detectSanitization checks if server sanitized the uploaded file
+func detectSanitization(originalFilename, body string, headers map[string]string) bool {
+	// Check if original filename appears in response
+	if strings.Contains(body, originalFilename) {
+		return false // Not sanitized (filename preserved)
+	}
+
+	// Check for sanitization keywords
+	sanitizationKeywords := []string{
+		"sanitized", "renamed", "stripped", "cleaned",
+		"neutralized", "filtered", "modified", "quarantined",
+	}
+	for _, keyword := range sanitizationKeywords {
+		if strings.Contains(strings.ToLower(body), keyword) {
+			return true
+		}
+	}
+
+	// Check if Content-Disposition has different filename
+	if cd, ok := headers["Content-Disposition"]; ok {
+		if strings.Contains(cd, "filename=") {
+			parts := strings.Split(cd, "filename=")
+			if len(parts) > 1 {
+				extractedName := strings.Trim(parts[1], `"'`)
+				if extractedName != "" && extractedName != originalFilename {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// extractFinalFilename finds the final filename from response
+func extractFinalFilename(body string) string {
+	// Look for patterns like "Stored as: filename" or "saved as filename"
+	patterns := []string{
+		`"filename":"`,
+		`"filename": "`,
+		`"name":"`,
+		`"name": "`,
+		`filename=`,
+		`Stored as: `,
+		`saved as: `,
+		`File: `,
+	}
+
+	for _, pattern := range patterns {
+		if idx := strings.Index(body, pattern); idx != -1 {
+			remaining := body[idx+len(pattern):]
+			// Extract until quote, space, comma, or newline
+			end := len(remaining)
+			for i, ch := range remaining {
+				if ch == '"' || ch == ',' || ch == ' ' || ch == '\n' || ch == '}' {
+					end = i
+					break
+				}
+			}
+			if end > 0 {
+				return remaining[:end]
+			}
+		}
+	}
+	return ""
 }

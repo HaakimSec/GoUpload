@@ -9,15 +9,19 @@ import (
 // Result holds the outcome of a single upload test.
 // Defined in a shared package to avoid import cycles between worker and oracle.
 type Result struct {
-	TestType    payload.TestType
-	Technique   string
-	Filename    string
-	StatusCode  int
-	RespLen     int
-	RespCT      string
-	BodySnippet string
-	Duration    time.Duration
-	Err         error
-	Vulnerable  string // Will be set to oracle.Verdict value
-	Flags       []string
+	TestType        payload.TestType
+	Technique       string
+	Filename        string
+	StatusCode      int
+	RespLen         int
+	RespCT          string
+	BodySnippet     string
+	ResponseBody    string
+	ResponseHeaders map[string]string
+	FinalFilename   string
+	Sanitized       bool
+	Duration        time.Duration
+	Err             error
+	Vulnerable      string
+	Flags           []string
 }
