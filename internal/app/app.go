@@ -1,3 +1,4 @@
+// internal/app/app.go
 package app
 
 import (
@@ -19,6 +20,7 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/template"
 	"github.com/HaakimSec/GoUpload/internal/types"
 	"github.com/HaakimSec/GoUpload/internal/validator"
+	"github.com/HaakimSec/GoUpload/internal/verifier"
 	"github.com/HaakimSec/GoUpload/internal/worker"
 )
 
@@ -28,14 +30,31 @@ type App struct {
 	Printer   *output.Printer
 	TechStack string
 	Baseline  *oracle.Baseline
+	Verifier  *verifier.RCEVerifier
 }
 
 // New creates a new App instance
 func New(cfg *config.Config) *App {
-	return &App{
+	app := &App{
 		Config:    cfg,
 		TechStack: cfg.TechStack,
 	}
+
+	// Initialize RCE verifier if enabled
+	if cfg.VerifyRCE {
+		client := &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 10 {
+					return fmt.Errorf("too many redirects")
+				}
+				return nil
+			},
+		}
+		app.Verifier = verifier.NewRCEVerifier(client, 15*time.Second)
+	}
+
+	return app
 }
 
 // Run executes the main application logic
@@ -85,6 +104,11 @@ func (a *App) Run() error {
 	allResults := a.executeTests(allPayloads)
 
 	a.Printer.PrintProgressNewline()
+
+	// Verify RCE on vulnerable results if enabled
+	if a.Config.VerifyRCE && a.Verifier != nil {
+		a.verifyRCE(allResults)
+	}
 
 	// Print results
 	a.printResults(allResults)
@@ -325,6 +349,52 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 	return allResults
 }
 
+// verifyRCE attempts to verify RCE on vulnerable results
+func (a *App) verifyRCE(allResults []*types.Result) {
+	vulnerableCount := 0
+	for _, r := range allResults {
+		if r.Vulnerable == "VULNERABLE" {
+			vulnerableCount++
+		}
+	}
+
+	if vulnerableCount == 0 {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\n  🚀 Verifying RCE on %d vulnerable uploads...\n", vulnerableCount)
+
+	verifiedCount := 0
+	for _, r := range allResults {
+		if r.Vulnerable != "VULNERABLE" {
+			continue
+		}
+
+		fmt.Fprintf(os.Stderr, "  🔍 Testing %s...", r.Filename)
+
+		err := a.Verifier.VerifyRCE(r, a.Config.URL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, " ❌ %s\n", err)
+			continue
+		}
+
+		if r.RCEVerified {
+			verifiedCount++
+			color.New(color.FgGreen).Fprintf(os.Stderr, " ✅ RCE CONFIRMED\n")
+			color.New(color.FgGreen).Fprintf(os.Stderr, "    Proof: %s\n", r.RCEProof)
+			color.New(color.FgGreen).Fprintf(os.Stderr, "    URL: %s?cmd=%s\n", r.FileURL, r.RCECommand)
+		} else {
+			color.New(color.FgYellow).Fprintf(os.Stderr, " ⚠️  Not verified\n")
+		}
+	}
+
+	if verifiedCount > 0 {
+		color.New(color.FgGreen, color.Bold).Fprintf(os.Stderr, "\n  ✅ RCE verified on %d/%d vulnerable uploads!\n\n", verifiedCount, vulnerableCount)
+	} else {
+		color.New(color.FgYellow).Fprintf(os.Stderr, "\n  ⚠️  RCE could not be verified on any vulnerable uploads.\n\n")
+	}
+}
+
 // printResults displays flagged findings in table format
 func (a *App) printResults(allResults []*types.Result) {
 	modules := groupResultsByType(allResults)
@@ -397,9 +467,7 @@ func (a *App) handleJSONOutput(allResults []*types.Result, stats oracle.SummaryS
 	jsonPrinter.SetBaselineUsed(len(a.Config.AllowList) > 0)
 
 	for i, r := range allResults {
-		if r.Vulnerable != string(oracle.VerdictSafe) && r.Vulnerable != "" {
-			jsonPrinter.AddFinding(r, "GENERAL", i+1)
-		}
+		jsonPrinter.AddFinding(r, "GENERAL", i+1)
 	}
 
 	jsonPrinter.SetSummary(stats)

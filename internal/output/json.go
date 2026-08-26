@@ -26,34 +26,45 @@ type JSONReport struct {
 
 // JSONSummary contains scan statistics
 type JSONSummary struct {
-	TotalTests      int     `json:"total_tests"`
-	Safe            int     `json:"safe"`
-	Suspect         int     `json:"suspect"`
-	Vulnerable      int     `json:"vulnerable"`
-	Errors          int     `json:"errors"`
-	DetectionRate   float64 `json:"detection_rate_percent"`
-	AvgResponseTime float64 `json:"avg_response_time_seconds"`
-	TotalElapsed    string  `json:"total_elapsed"`
+	TotalTests       int     `json:"total_tests"`
+	Safe             int     `json:"safe"`
+	Suspect          int     `json:"suspect"`
+	Vulnerable       int     `json:"vulnerable"`
+	Errors           int     `json:"errors"`
+	DetectionRate    float64 `json:"detection_rate_percent"`
+	AvgResponseTime  float64 `json:"avg_response_time_seconds"`
+	TotalElapsed     string  `json:"total_elapsed"`
+	RCEVerified      int     `json:"rce_verified,omitempty"`
+	RCEUnverified    int     `json:"rce_unverified,omitempty"`
+	RCETruePositive  int     `json:"rce_true_positive,omitempty"`
+	RCEFalsePositive int     `json:"rce_false_positive,omitempty"`
 }
 
 // JSONFinding represents a single vulnerability finding
 type JSONFinding struct {
-	ID              int               `json:"id"`
-	Module          string            `json:"module"`
-	Technique       string            `json:"technique"`
-	Filename        string            `json:"filename"`
-	Extension       string            `json:"extension"`
-	Verdict         string            `json:"verdict"`
-	Confidence      int               `json:"confidence_percent"`
-	StatusCode      int               `json:"status_code"`
-	ResponseLength  int               `json:"response_length_bytes"`
-	Duration        string            `json:"duration"`
-	Flags           []string          `json:"flags"`
-	Error           string            `json:"error,omitempty"`
-	ResponseBody    string            `json:"response_body,omitempty"`
-	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
-	FinalFilename   string            `json:"final_filename,omitempty"`
-	Sanitized       bool              `json:"sanitized"`
+	ID               int               `json:"id"`
+	Module           string            `json:"module"`
+	Technique        string            `json:"technique"`
+	Filename         string            `json:"filename"`
+	Extension        string            `json:"extension"`
+	Verdict          string            `json:"verdict"`
+	Confidence       int               `json:"confidence_percent"`
+	StatusCode       int               `json:"status_code"`
+	ResponseLength   int               `json:"response_length_bytes"`
+	Duration         string            `json:"duration"`
+	Flags            []string          `json:"flags"`
+	Error            string            `json:"error,omitempty"`
+	ResponseBody     string            `json:"response_body,omitempty"`
+	ResponseHeaders  map[string]string `json:"response_headers,omitempty"`
+	FinalFilename    string            `json:"final_filename,omitempty"`
+	Sanitized        bool              `json:"sanitized"`
+	VerdictReason    string            `json:"verdict_reason,omitempty"`
+	RCEVerified      bool              `json:"rce_verified,omitempty"`
+	RCEProof         string            `json:"rce_proof,omitempty"`
+	FileURL          string            `json:"file_url,omitempty"`
+	RCECommand       string            `json:"rce_command,omitempty"`
+	VerificationTime string            `json:"verification_time,omitempty"`
+	GroundTruth      string            `json:"ground_truth,omitempty"`
 }
 
 // JSONMetadata contains scan metadata
@@ -62,6 +73,7 @@ type JSONMetadata struct {
 	Fingerprint  string `json:"fingerprint,omitempty"`
 	TemplateUsed string `json:"template_used,omitempty"`
 	BaselineUsed bool   `json:"baseline_used"`
+	VerifyRCE    bool   `json:"verify_rce,omitempty"`
 }
 
 // JSONPrinter handles JSON output formatting
@@ -76,7 +88,7 @@ func NewJSONPrinter(printer *Printer, url, param string, concurrency int) *JSONP
 		printer: printer,
 		report: JSONReport{
 			Tool:        "GoUpload",
-			Version:     "1.2.0",
+			Version:     "1.8.0",
 			ScanTime:    time.Now().Format(time.RFC3339),
 			TargetURL:   url,
 			UploadParam: param,
@@ -106,33 +118,92 @@ func (jp *JSONPrinter) SetBaselineUsed(used bool) {
 	jp.report.Metadata.BaselineUsed = used
 }
 
+// SetVerifyRCE sets whether RCE verification was used
+func (jp *JSONPrinter) SetVerifyRCE(used bool) {
+	jp.report.Metadata.VerifyRCE = used
+}
+
 // AddFinding adds a single finding to the report
 func (jp *JSONPrinter) AddFinding(r *types.Result, moduleName string, id int) {
 	confidence := calculateConfidence(r.Flags, r.Vulnerable)
 
 	finding := JSONFinding{
-		ID:              id,
-		Module:          moduleName,
-		Technique:       r.Technique,
-		Filename:        r.Filename,
-		Extension:       extractExtensionFromFilename(r.Filename),
-		Verdict:         r.Vulnerable,
-		Confidence:      confidence,
-		StatusCode:      r.StatusCode,
-		ResponseLength:  r.RespLen,
-		Duration:        r.Duration.String(),
-		Flags:           r.Flags,
-		ResponseBody:    truncateString(r.ResponseBody, 500),
-		ResponseHeaders: r.ResponseHeaders,
-		FinalFilename:   r.FinalFilename,
-		Sanitized:       r.Sanitized,
+		ID:               id,
+		Module:           moduleName,
+		Technique:        r.Technique,
+		Filename:         r.Filename,
+		Extension:        extractExtensionFromFilename(r.Filename),
+		Verdict:          r.Vulnerable,
+		Confidence:       confidence,
+		StatusCode:       r.StatusCode,
+		ResponseLength:   r.RespLen,
+		Duration:         r.Duration.String(),
+		Flags:            r.Flags,
+		ResponseBody:     truncateString(r.ResponseBody, 500),
+		ResponseHeaders:  r.ResponseHeaders,
+		FinalFilename:    r.FinalFilename,
+		Sanitized:        r.Sanitized,
+		RCEVerified:      r.RCEVerified,
+		RCEProof:         r.RCEProof,
+		FileURL:          r.FileURL,
+		RCECommand:       r.RCECommand,
+		VerificationTime: r.VerificationTime.String(),
+		GroundTruth:      determineGroundTruth(r),
 	}
+
+	finding.VerdictReason = explainVerdict(r)
 
 	if r.Err != nil {
 		finding.Error = r.Err.Error()
 	}
 
 	jp.report.Findings = append(jp.report.Findings, finding)
+}
+
+// determineGroundTruth adds ground truth labels for ML dataset
+func determineGroundTruth(r *types.Result) string {
+	if r.Vulnerable != "VULNERABLE" {
+		return ""
+	}
+
+	if r.RCEVerified {
+		return "TRUE_POSITIVE"
+	}
+
+	// If verification was attempted but failed
+	if r.VerificationTime > 0 {
+		return "FALSE_POSITIVE"
+	}
+
+	// Verification not attempted
+	return "UNVERIFIED"
+}
+
+// explainVerdict provides reasoning
+func explainVerdict(r *types.Result) string {
+	reasons := []string{}
+
+	if r.StatusCode == 200 {
+		reasons = append(reasons, "HTTP 200 OK")
+	}
+	if r.Sanitized {
+		reasons = append(reasons, "Server sanitized file")
+	}
+	if hasSuspiciousFilename(r.Filename) {
+		reasons = append(reasons, "Executable extension")
+	}
+	for _, flag := range r.Flags {
+		reasons = append(reasons, flag)
+	}
+
+	// Add RCE verification to reason
+	if r.RCEVerified {
+		reasons = append(reasons, "RCE VERIFIED")
+	} else if r.VerificationTime > 0 {
+		reasons = append(reasons, "RCE verification failed")
+	}
+
+	return strings.Join(reasons, "; ")
 }
 
 // truncateString is OUTSIDE AddFinding - at package level
@@ -150,7 +221,7 @@ func (jp *JSONPrinter) SetSummary(stats oracle.SummaryStats) {
 		detectionRate = float64(stats.Vulnerable+stats.Suspect) / float64(stats.Total) * 100
 	}
 
-	jp.report.Summary = JSONSummary{
+	summary := JSONSummary{
 		TotalTests:      stats.Total,
 		Safe:            stats.Safe,
 		Suspect:         stats.Suspect,
@@ -160,6 +231,21 @@ func (jp *JSONPrinter) SetSummary(stats oracle.SummaryStats) {
 		AvgResponseTime: roundFloat(stats.Duration, 3),
 		TotalElapsed:    fmt.Sprintf("%.3fs", stats.Duration),
 	}
+
+	// Calculate RCE verification statistics
+	if len(jp.report.Findings) > 0 {
+		for _, finding := range jp.report.Findings {
+			if finding.GroundTruth == "TRUE_POSITIVE" {
+				summary.RCEVerified++
+				summary.RCETruePositive++
+			} else if finding.GroundTruth == "FALSE_POSITIVE" {
+				summary.RCEUnverified++
+				summary.RCEFalsePositive++
+			}
+		}
+	}
+
+	jp.report.Summary = summary
 }
 
 // WriteToFile writes the JSON report to a file
@@ -206,6 +292,7 @@ func calculateConfidence(flags []string, verdict string) int {
 		"json-indicates-success":      10,
 		"image-upload-accepted":       10,
 		"exif-data-processed":         15,
+		"rce-verified":                25,
 	}
 
 	for _, flag := range flags {
@@ -240,4 +327,20 @@ func roundFloat(f float64, decimals int) float64 {
 	var result float64
 	fmt.Sscanf(s, "%f", &result)
 	return result
+}
+
+// hasSuspiciousFilename checks if filename has executable extension
+func hasSuspiciousFilename(filename string) bool {
+	lower := strings.ToLower(filename)
+	suspiciousExts := []string{
+		".php", ".php3", ".php4", ".php5", ".php7", ".phtml", ".phar",
+		".jsp", ".jspx", ".asp", ".aspx", ".ashx",
+		".js", ".py", ".cgi", ".sh",
+	}
+	for _, ext := range suspiciousExts {
+		if strings.Contains(lower, ext) {
+			return true
+		}
+	}
+	return false
 }

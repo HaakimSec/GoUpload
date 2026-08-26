@@ -1,28 +1,45 @@
-# Binary
+# Binaries
+GoUpload
 goupload
-goupload.exe
-goupload_linux
-goupload_mac
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+internal/config/config
 
-# IDE
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Build artifacts
+bin/
+build/
+dist/
+
+# Demo files
+demo_fixed.gif
+docs/demo.cast
+docs/demo_fixed.gif
+docs/demo_frame.png
+*.cast
+*.gif
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
-
-# Go
-vendor/
-
-# Test files
-*.test
-*.out
-
-# Temporary
-tmp/
-temp/
-GoUpload

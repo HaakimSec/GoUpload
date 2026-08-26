@@ -362,152 +362,61 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		flagSet[f] = true
 	}
 
-	// GraphQL Validation Safeguard
-	if flagSet["graphql-validation-error"] {
+	// SAFE: Confirmed blocked or sanitized
+	if result.StatusCode == 403 || result.StatusCode == 400 {
 		return VerdictSafe
 	}
-
-	// GraphQL mutation accepted with executable extension = VULNERABLE
-	if flagSet["graphql-mutation-accepted"] && hasSuspiciousExt(pl) {
-		return VerdictVulnerable
+	if flagSet["sanitized"] || result.Sanitized {
+		return VerdictSafe
 	}
-
-	// GraphQL stack trace disclosed = VULNERABLE
-	if flagSet["graphql-stack-trace-disclosed"] {
-		return VerdictVulnerable
-	}
-
-	// Node.js module error disclosed = SUSPECT
-	if flagSet["nodejs-module-error-disclosed"] {
-		return VerdictSuspect
-	}
-
-	// XXE: file accepted with XXE payload = VULNERABLE
-	if flagSet["xxe-file-accepted"] {
-		return VerdictVulnerable
-	}
-
-	// XXE: file content disclosed = VULNERABLE
-	if flagSet["xxe-file-disclosure"] {
-		return VerdictVulnerable
-	}
-
-	// XXE: entity expansion = SUSPECT
-	if flagSet["xxe-entity-expansion"] {
-		return VerdictSuspect
-	}
-
-	// Race condition: file overwrite confirmed with executable = VULNERABLE
-	if flagSet["file-overwrite-confirmed"] && flagSet["executable-accepted-in-race"] {
-		return VerdictVulnerable
-	}
-
-	// Race condition: concurrent access + file accepted = VULNERABLE
-	if flagSet["concurrent-access-detected"] && flagSet["race-condition-file-accepted"] {
-		return VerdictVulnerable
-	}
-
-	// Race condition: file accepted with suspicious extension = SUSPECT
-	if flagSet["race-condition-file-accepted"] && hasSuspiciousExt(pl) {
-		return VerdictSuspect
-	}
-
-	// Race condition: concurrent access alone = SUSPECT
-	if flagSet["concurrent-access-detected"] {
-		return VerdictSuspect
-	}
-
-	// Fall back to HTTP status check
 	if !isSuccessStatus(result.StatusCode) {
 		return VerdictSafe
 	}
 
-	// HIGH CONFIDENCE: HTML success + filepath disclosure = VULNERABLE
-	if flagSet["html-indicates-success"] && flagSet["filepath-disclosed"] {
+	hasSuspiciousExt := isExecutableExtension(pl.Extension) ||
+		strings.Contains(pl.Filename, ".php") ||
+		strings.Contains(pl.Filename, ".jsp") ||
+		strings.Contains(pl.Filename, ".asp")
+
+	hasSuccessIndicator := flagSet["json-indicates-success"] ||
+		flagSet["html-indicates-success"] ||
+		flagSet["elfinder-upload-success"] ||
+		flagSet["filepath-disclosed"] ||
+		flagSet["filename-reflected-in-response"]
+
+	hasExecutionEvidence := flagSet["executable-accepted-in-race"] ||
+		flagSet["xxe-file-disclosure"] ||
+		flagSet["file-overwrite-confirmed"] ||
+		flagSet["graphql-mutation-accepted"]
+
+	if result.StatusCode == 200 && hasSuspiciousExt && hasSuccessIndicator && hasExecutionEvidence {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: HTML success + suspicious extension = VULNERABLE
-	if flagSet["html-indicates-success"] && hasSuspiciousExt(pl) {
+	if flagSet["graphql-mutation-accepted"] && hasSuspiciousExt {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Content-type spoof accepted
-	if flagSet["content-type-spoof-accepted"] &&
-		(flagSet["html-indicates-success"] || flagSet["filename-reflected-in-response"]) {
+	if flagSet["xxe-file-accepted"] {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Traversal accepted with file error
-	if flagSet["traversal-filename-accepted"] && flagSet["filesystem-error-disclosed"] {
+	if flagSet["file-overwrite-confirmed"] {
 		return VerdictVulnerable
 	}
 
-	// HIGH CONFIDENCE: Image upload with executable
-	if flagSet["image-upload-accepted"] && hasSuspiciousExt(pl) {
-		return VerdictVulnerable
-	}
-
-	// EXIF data processed
-	if flagSet["exif-data-processed"] && flagSet["image-upload-accepted"] {
-		return VerdictVulnerable
-	}
-
-	// Original high confidence flags
-	highConfidenceFlags := []string{
-		"suspicious-ext-accepted",
-		"spoofed-content-accepted",
-		"traversal-filename-accepted",
-	}
-	highCount := 0
-	for _, hf := range highConfidenceFlags {
-		if flagSet[hf] {
-			highCount++
-		}
-	}
-
-	supportingFlags := []string{
-		"response-length-matches-baseline",
-		"status-matches-baseline",
-		"json-indicates-success",
-		"filename-reflected-in-response",
-		"race-condition-file-accepted",
-		"concurrent-access-detected",
-		"file-overwrite-confirmed",
-		"executable-accepted-in-race",
-		"html-indicates-success",
-		"filepath-disclosed",
-		"image-upload-accepted",
-		"graphql-mutation-accepted",
-		"graphql-expected-response",
-		"xxe-file-accepted",
-		"xxe-file-disclosure",
-	}
-	supportCount := 0
-	for _, sf := range supportingFlags {
-		if flagSet[sf] {
-			supportCount++
-		}
-	}
-
-	if highCount >= 1 && supportCount >= 1 {
-		return VerdictVulnerable
-	}
-	if highCount >= 2 {
-		return VerdictVulnerable
-	}
-	if highCount >= 1 {
+	if result.StatusCode == 200 && hasSuspiciousExt && hasSuccessIndicator {
 		return VerdictSuspect
 	}
-	if flagSet["traversal-filename-accepted"] {
+
+	if result.StatusCode == 200 && hasSuccessIndicator && !hasSuspiciousExt {
 		return VerdictSuspect
 	}
-	if flagSet["filename-reflected-in-response"] && flagSet["path-structure-in-response"] {
+
+	if flagSet["concurrent-access-detected"] {
 		return VerdictSuspect
 	}
-	if flagSet["html-indicates-success"] || flagSet["filepath-disclosed"] {
-		return VerdictSuspect
-	}
+
 	if len(flags) > 0 {
 		return VerdictSuspect
 	}
@@ -600,4 +509,20 @@ func ComputeSummary(results []*types.Result) SummaryStats {
 func (s SummaryStats) String() string {
 	return fmt.Sprintf("Total: %d | Safe: %d | Suspect: %d | Vulnerable: %d | Errors: %d | Avg: %.3fs",
 		s.Total, s.Safe, s.Suspect, s.Vulnerable, s.Errors, s.Duration)
+}
+
+// hasSuspiciousFilename checks if filename has executable extension
+func hasSuspiciousFilename(filename string) bool {
+	lower := strings.ToLower(filename)
+	suspiciousExts := []string{
+		".php", ".php3", ".php4", ".php5", ".php7", ".phtml", ".phar",
+		".jsp", ".jspx", ".asp", ".aspx", ".ashx",
+		".js", ".py", ".cgi", ".sh",
+	}
+	for _, ext := range suspiciousExts {
+		if strings.Contains(lower, ext) {
+			return true
+		}
+	}
+	return false
 }

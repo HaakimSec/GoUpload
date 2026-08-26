@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const Version = "1.7.0"
+const Version = "1.8.0"
 
 func runUpdate() error {
 	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
@@ -28,22 +28,23 @@ type Config struct {
 	Data            map[string]string
 	AllowList       []string
 	Concurrency     int
-	TechStack       string   // Tech stack to target: php, asp.net, java, nodejs, python, all, auto
-	AutoDetect      bool     // Auto-detect tech stack before testing
-	CheckOnly       bool     // Only validate target, don't run tests
-	NoValidate      bool     // Skip target validation
-	GraphQLMutation string   // Custom GraphQL mutation string
-	GraphQLVariable string   // GraphQL variable name for file upload
-	ModuleOverwrite bool     // Enable Node.js module overwrite payloads
-	ModulePath      string   // Custom module path for overwrite
-	Template        string   // Path to single template file
-	TemplateDir     string   // Path to templates directory
-	ListTemplates   bool     // List available templates
-	ListModules     bool     // List available modules
-	Modules         []string // Specific modules to run
-	OutputFormat    string   // json, table (default)
-	OutputFile      string   // File path for output
-	DiscoverMode    bool     // Discover upload forms on a page
+	TechStack       string
+	AutoDetect      bool
+	CheckOnly       bool
+	NoValidate      bool
+	GraphQLMutation string
+	GraphQLVariable string
+	ModuleOverwrite bool
+	ModulePath      string
+	Template        string
+	TemplateDir     string
+	ListTemplates   bool
+	ListModules     bool
+	Modules         []string
+	OutputFormat    string
+	OutputFile      string
+	DiscoverMode    bool
+	VerifyRCE       bool
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -77,6 +78,7 @@ func Parse() (*Config, error) {
 		outputFormat    string
 		outputFile      string
 		discoverMode    bool
+		verifyRCE       bool
 		showVersion     bool
 		doUpdate        bool
 	)
@@ -111,6 +113,8 @@ func Parse() (*Config, error) {
 	flag.StringVar(&outputFile, "output-file", "", "Save output to file")
 	flag.BoolVar(&discoverMode, "discover", false, "Discover upload forms on target page")
 	flag.StringVar(&moduleStr, "module", "", "Run specific modules: extension,content-type,magic-byte,filename,path-traversal,graphql,unicode,template,size-boundary,race-condition,polyglot,xxe,server-config")
+	flag.BoolVar(&verifyRCE, "verify-rce", false, "Verify RCE on vulnerable uploads")
+	flag.BoolVar(&verifyRCE, "rce", false, "Verify RCE on vulnerable uploads (shorthand)")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -149,7 +153,7 @@ func Parse() (*Config, error) {
 
 		// Version
 		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintln(os.Stderr, " Built for Security Professionals  │  @haakimsec")
+		version.Fprintf(os.Stderr, "   v%s  │  Built for Security Professionals  │  @haakimsec\n", Version)
 		fmt.Fprintln(os.Stderr)
 
 		// Separator
@@ -172,6 +176,7 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --tech php\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload --check -u http://target.com/upload\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u https://api.target.com/graphql --graphql-mutation \"mutation(\\$file:Upload!){uploadFile(file:\\$file){id}}\"\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --verify-rce\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Flags
@@ -188,6 +193,13 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    python   - Python payloads (.py, etc.)\n")
 		fmt.Fprintf(os.Stderr, "    all      - Test all payloads (default)\n")
 		fmt.Fprintf(os.Stderr, "    auto     - Auto-detect via fingerprinting\n")
+		fmt.Fprintln(os.Stderr)
+
+		// RCE Verification Info
+		bold.Fprintln(os.Stderr, "  RCE VERIFICATION:")
+		fmt.Fprintf(os.Stderr, "    --verify-rce  Automatically verify RCE on vulnerable uploads\n")
+		fmt.Fprintf(os.Stderr, "                   Extracts file path, checks execution, runs commands\n")
+		fmt.Fprintf(os.Stderr, "                   Adds ground truth labels for ML training\n")
 		fmt.Fprintln(os.Stderr)
 	}
 
@@ -307,6 +319,7 @@ func Parse() (*Config, error) {
 		Modules:         modules,
 		OutputFile:      outputFile,
 		DiscoverMode:    discoverMode,
+		VerifyRCE:       verifyRCE,
 	}, nil
 }
 
