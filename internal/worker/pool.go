@@ -345,13 +345,11 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 
 	r.FinalFilename = extractFinalFilename(r.ResponseBody)
 
-	// Run oracle analysis
-
-	if p.config.Baseline != nil {
-		verdict := oracle.Analyze(p.config.Baseline, r, pl)
-		r.Vulnerable = string(verdict.Verdict)
-		r.Flags = verdict.Flags
-	}
+	// Run oracle analysis - ALWAYS, even without baseline
+	// This is the critical fix: previously this was skipped when baseline was nil
+	verdict := oracle.Analyze(p.config.Baseline, r, pl)
+	r.Vulnerable = string(verdict.Verdict)
+	r.Flags = verdict.Flags
 
 	return r
 }

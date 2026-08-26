@@ -52,7 +52,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 	}
 
 	// Check 2: Response length similarity to baseline
-	if baseline.ResponseLength > 0 && result.RespLen > 0 {
+	if baseline != nil && baseline.ResponseLength > 0 && result.RespLen > 0 {
 		ratio := float64(result.RespLen) / float64(baseline.ResponseLength)
 		if ratio > 0.9 && ratio < 1.1 {
 			if isSuspiciousExt {
@@ -62,7 +62,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 	}
 
 	// Check 3: Exact status code match with baseline
-	if result.StatusCode == baseline.StatusCode && isSuspiciousExt {
+	if baseline != nil && result.StatusCode == baseline.StatusCode && isSuspiciousExt {
 		flags = append(flags, "status-matches-baseline")
 	}
 
@@ -78,6 +78,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			`"code":200`, `"code": 200`,
 			`"code":201`, `"code": 201`,
 			`"message":"success"`, `"message": "success"`,
+			`"added"`, `"added":`,
 		}
 		for _, indicator := range jsonSuccessIndicators {
 			if strings.Contains(lower, indicator) {
@@ -343,6 +344,20 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
+	// Check 12: elFinder/WordPress File Manager specific detection
+	if strings.Contains(result.BodySnippet, `"added"`) || strings.Contains(result.ResponseBody, `"added"`) {
+		flags = append(flags, "elfinder-upload-success")
+		flags = append(flags, "json-indicates-success")
+
+		// Additional checks for WordPress File Manager
+		if strings.Contains(result.ResponseBody, `"url"`) {
+			flags = append(flags, "filepath-disclosed")
+		}
+		if strings.Contains(result.ResponseBody, pl.Filename) {
+			flags = append(flags, "filename-reflected-in-response")
+		}
+	}
+
 	verdict := determineVerdict(flags, result, pl)
 
 	return AnalysisResult{
@@ -373,50 +388,81 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictSafe
 	}
 
+	// Check for executable extensions
 	hasSuspiciousExt := isExecutableExtension(pl.Extension) ||
 		strings.Contains(pl.Filename, ".php") ||
+		strings.Contains(pl.Filename, ".phtml") ||
+		strings.Contains(pl.Filename, ".phar") ||
 		strings.Contains(pl.Filename, ".jsp") ||
-		strings.Contains(pl.Filename, ".asp")
+		strings.Contains(pl.Filename, ".jspx") ||
+		strings.Contains(pl.Filename, ".asp") ||
+		strings.Contains(pl.Filename, ".aspx") ||
+		strings.Contains(pl.Filename, ".py") ||
+		strings.Contains(pl.Filename, ".cgi") ||
+		strings.Contains(pl.Filename, ".sh")
 
+	// Success indicators
 	hasSuccessIndicator := flagSet["json-indicates-success"] ||
 		flagSet["html-indicates-success"] ||
-		flagSet["elfinder-upload-success"] ||
 		flagSet["filepath-disclosed"] ||
 		flagSet["filename-reflected-in-response"]
 
-	hasExecutionEvidence := flagSet["executable-accepted-in-race"] ||
-		flagSet["xxe-file-disclosure"] ||
-		flagSet["file-overwrite-confirmed"] ||
-		flagSet["graphql-mutation-accepted"]
+	// CRITICAL FIX: WordPress File Manager / elFinder detection
+	// This MUST come before other checks to ensure proper verdict
+	if flagSet["elfinder-upload-success"] {
+		// The upload was successful via elFinder (WordPress File Manager)
+		if hasSuspiciousExt {
+			// Executable file uploaded successfully - This is RCE!
+			return VerdictVulnerable
+		}
+		// Non-executable file uploaded
+		if hasSuccessIndicator {
+			return VerdictSuspect
+		}
+		return VerdictSafe
+	}
 
-	if result.StatusCode == 200 && hasSuspiciousExt && hasSuccessIndicator && hasExecutionEvidence {
+	// Direct WordPress File Manager RCE check
+	if isWordPressFileManagerRCE(result, pl) {
 		return VerdictVulnerable
 	}
 
+	// GraphQL mutation with executable extension
 	if flagSet["graphql-mutation-accepted"] && hasSuspiciousExt {
 		return VerdictVulnerable
 	}
 
+	// XXE file accepted
 	if flagSet["xxe-file-accepted"] {
 		return VerdictVulnerable
 	}
 
+	// File overwrite confirmed
 	if flagSet["file-overwrite-confirmed"] {
 		return VerdictVulnerable
 	}
 
+	// Strong evidence: 200 + suspicious ext + success
 	if result.StatusCode == 200 && hasSuspiciousExt && hasSuccessIndicator {
+		return VerdictVulnerable
+	}
+
+	// Medium evidence: 200 + suspicious ext (no explicit success indicator)
+	if result.StatusCode == 200 && hasSuspiciousExt {
 		return VerdictSuspect
 	}
 
+	// Success without suspicious extension
 	if result.StatusCode == 200 && hasSuccessIndicator && !hasSuspiciousExt {
 		return VerdictSuspect
 	}
 
+	// Race condition detection
 	if flagSet["concurrent-access-detected"] {
 		return VerdictSuspect
 	}
 
+	// Any other flags
 	if len(flags) > 0 {
 		return VerdictSuspect
 	}
@@ -424,14 +470,32 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 	return VerdictSafe
 }
 
-// hasSuspiciousExt is a helper to check if payload has executable extension
-func hasSuspiciousExt(pl *payload.Payload) bool {
-	return isExecutableExtension(pl.Extension)
-}
+// Helper function to detect WordPress File Manager RCE
+func isWordPressFileManagerRCE(result *types.Result, pl *payload.Payload) bool {
+	// Check if the response indicates a successful elFinder upload
+	if !strings.Contains(result.ResponseBody, "added") &&
+		!strings.Contains(result.ResponseBody, "success") {
+		return false
+	}
 
-// isSuccessStatus returns true for HTTP status codes that typically indicate success.
-func isSuccessStatus(code int) bool {
-	return (code >= 200 && code < 300) || code == 302 || code == 303
+	// Check if we're dealing with an executable file
+	executableExts := []string{
+		".php", ".php3", ".php4", ".php5", ".php7", ".phtml", ".pht", ".phar",
+		".jsp", ".jspx", ".asp", ".aspx", ".ashx",
+	}
+
+	for _, ext := range executableExts {
+		if strings.Contains(pl.Filename, ext) {
+			// Check if response contains the uploaded filename or URL
+			if strings.Contains(result.ResponseBody, pl.Filename) ||
+				strings.Contains(result.ResponseBody, "url") ||
+				strings.Contains(result.ResponseBody, "file") {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // isExecutableExtension checks if an extension is commonly associated with
@@ -458,6 +522,16 @@ func isExecutableExtension(ext string) bool {
 	}
 
 	return executableExts[lower]
+}
+
+// hasSuspiciousExt is a helper to check if payload has executable extension
+func hasSuspiciousExt(pl *payload.Payload) bool {
+	return isExecutableExtension(pl.Extension)
+}
+
+// isSuccessStatus returns true for HTTP status codes that typically indicate success.
+func isSuccessStatus(code int) bool {
+	return (code >= 200 && code < 300) || code == 302 || code == 303
 }
 
 // FormatFlags joins flags into a readable string.

