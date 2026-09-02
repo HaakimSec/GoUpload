@@ -43,6 +43,13 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	var flags []string
 
+	// IMPORTANT: Use full response body for analysis
+	bodyToCheck := result.ResponseBody
+	if bodyToCheck == "" {
+		bodyToCheck = result.BodySnippet
+	}
+	lowerBody := strings.ToLower(bodyToCheck)
+
 	// Check 1: Successful status code for an executable/suspicious payload
 	isSuspiciousExt := isExecutableExtension(pl.Extension)
 	statusOK := isSuccessStatus(result.StatusCode)
@@ -68,7 +75,6 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	// Check 4: JSON response indicating success
 	if strings.Contains(result.RespCT, "application/json") {
-		lower := strings.ToLower(result.BodySnippet)
 		jsonSuccessIndicators := []string{
 			`"success":true`, `"success": true`,
 			`"status":"ok"`, `"status":"success"`,
@@ -81,7 +87,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			`"added"`, `"added":`,
 		}
 		for _, indicator := range jsonSuccessIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "json-indicates-success")
 				break
 			}
@@ -89,81 +95,95 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 	}
 
 	// Check 5a: Filename or path reflected in response
-	if result.BodySnippet != "" {
-		cleanFilename := strings.Split(pl.Filename, "%")[0]
-		cleanFilename = strings.Split(cleanFilename, "\x00")[0]
+	cleanFilename := strings.Split(pl.Filename, "%")[0]
+	cleanFilename = strings.Split(cleanFilename, "\x00")[0]
 
-		if strings.Contains(result.BodySnippet, cleanFilename) {
-			flags = append(flags, "filename-reflected-in-response")
-		}
+	if strings.Contains(bodyToCheck, cleanFilename) {
+		flags = append(flags, "filename-reflected-in-response")
+	}
 
-		pathIndicators := []string{
-			"/uploads/", "/upload/", "/files/", "/images/",
-			"uploads/", "upload/", "files/",
-			`src="`, `href="`, "url(", `path":`,
-		}
-		for _, indicator := range pathIndicators {
-			if strings.Contains(strings.ToLower(result.BodySnippet), indicator) {
-				flags = append(flags, "path-structure-in-response")
-				break
-			}
+	pathIndicators := []string{
+		"/uploads/", "/upload/", "/files/", "/images/",
+		"uploads/", "upload/", "files/",
+		`src="`, `href="`, "url(", `path":`,
+		"target file:", "target dir:", "file exists:", "dir writable:",
+	}
+	for _, indicator := range pathIndicators {
+		if strings.Contains(lowerBody, indicator) {
+			flags = append(flags, "path-structure-in-response")
+			break
 		}
 	}
 
-	// Check 5b: HTML success patterns
-	if result.BodySnippet != "" {
-		lower := strings.ToLower(result.BodySnippet)
-		htmlSuccessPatterns := []string{
-			"file uploaded successfully",
-			"file has been uploaded",
-			"upload successful",
-			"successfully uploaded",
-			"profile updated",
-			"avatar uploaded",
-			"document uploaded",
-			"file uploaded",
-			"uploaded:",
-			"location:",
-			"file uploaded to",
-			"has been saved",
-			"upload complete",
-			"file saved",
+	// Check 5b: HTML success patterns - Use FULL response body
+	htmlSuccessPatterns := []string{
+		"file uploaded successfully",
+		"file has been uploaded",
+		"upload successful",
+		"successfully uploaded",
+		"profile updated",
+		"avatar uploaded",
+		"document uploaded",
+		"file uploaded",
+		"uploaded:",
+		"location:",
+		"file uploaded to",
+		"has been saved",
+		"upload complete",
+		"file saved",
+		"uploaded successfully",
+		"file uploaded successfully",
+		"target file:",      // HTML comment debug info
+		"dir writable: yes", // Debug info
+		"file exists: yes",  // Debug info
+	}
+	for _, pattern := range htmlSuccessPatterns {
+		if strings.Contains(lowerBody, pattern) {
+			flags = append(flags, "html-indicates-success")
+			break
 		}
-		for _, pattern := range htmlSuccessPatterns {
-			if strings.Contains(lower, pattern) {
-				flags = append(flags, "html-indicates-success")
-				break
-			}
-		}
+	}
 
-		// Check 5c: Direct file path disclosure
-		pathDisclosurePatterns := []string{
-			"href=\"uploads/",
-			"href='uploads/",
-			"href=\"profile_uploads/",
-			"href=\"document_uploads/",
-			"href=\"avatar_uploads/",
-			"src=\"uploads/",
-			"location: uploads/",
-			"location: profile_uploads/",
-			"path:",
-			"filepath:",
-			"file_path:",
+	// Check 5c: Direct file path disclosure - Use FULL response body
+	pathDisclosurePatterns := []string{
+		"href=\"uploads/",
+		"href='uploads/",
+		"href=\"profile_uploads/",
+		"href=\"document_uploads/",
+		"href=\"avatar_uploads/",
+		"src=\"uploads/",
+		"location: uploads/",
+		"location: profile_uploads/",
+		"path:",
+		"filepath:",
+		"file_path:",
+		"uploads/",
+		"upload/",
+		"target file:",
+		"target dir:",
+	}
+	for _, pattern := range pathDisclosurePatterns {
+		if strings.Contains(lowerBody, pattern) {
+			flags = append(flags, "filepath-disclosed")
+			break
 		}
-		for _, pattern := range pathDisclosurePatterns {
-			if strings.Contains(lower, pattern) {
-				flags = append(flags, "filepath-disclosed")
-				break
-			}
-		}
+	}
 
-		// Check 5d: Generic success keywords
-		genericSuccessWords := []string{"success", "succeeded", "completed"}
-		for _, word := range genericSuccessWords {
-			if strings.Contains(lower, word) && isSuspiciousExt {
-				flags = append(flags, "success-keyword-with-suspicious-ext")
-				break
-			}
+	// Check 5d: Generic success keywords
+	genericSuccessWords := []string{"success", "succeeded", "completed", "uploaded"}
+	for _, word := range genericSuccessWords {
+		if strings.Contains(lowerBody, word) && isSuspiciousExt {
+			flags = append(flags, "success-keyword-with-suspicious-ext")
+			break
+		}
+	}
+
+	// Check 5e: Simple upload lab detection - Check BOTH body and snippet
+	if isSuspiciousExt && strings.Contains(lowerBody, ".php") {
+		if strings.Contains(lowerBody, "uploads/") || strings.Contains(lowerBody, "upload/") ||
+			strings.Contains(lowerBody, "target file:") || strings.Contains(lowerBody, "target dir:") {
+			flags = append(flags, "filepath-disclosed")
+			flags = append(flags, "filename-reflected-in-response")
 		}
 	}
 
@@ -176,9 +196,8 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	if pl.TestType == payload.TestTypeContentTypeSpoof {
 		if pl.ContentType != "" && !strings.HasPrefix(pl.ContentType, "text/") {
-			lower := strings.ToLower(result.BodySnippet)
-			if strings.Contains(lower, "upload") &&
-				(strings.Contains(lower, "success") || strings.Contains(lower, "uploaded")) {
+			if strings.Contains(lowerBody, "upload") &&
+				(strings.Contains(lowerBody, "success") || strings.Contains(lowerBody, "uploaded")) {
 				flags = append(flags, "content-type-spoof-accepted")
 			}
 		}
@@ -192,14 +211,13 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	// Check 7: Path traversal specific
 	if pl.TestType == payload.TestTypePathTraversal {
-		lower := strings.ToLower(result.BodySnippet)
 		traversalErrorIndicators := []string{
 			"no such file", "permission denied", "is a directory",
 			"not a directory", "file exists", "cannot open",
 			"no such file or directory",
 		}
 		for _, indicator := range traversalErrorIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "filesystem-error-disclosed")
 				break
 			}
@@ -211,7 +229,6 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	// Check 8: Image upload specific checks
 	if pl.TestType == payload.TestTypeMagicByteSpoof {
-		lower := strings.ToLower(result.BodySnippet)
 		imageSuccessIndicators := []string{
 			"avatar uploaded",
 			"image uploaded",
@@ -222,7 +239,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			"picture uploaded",
 		}
 		for _, indicator := range imageSuccessIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "image-upload-accepted")
 				break
 			}
@@ -233,7 +250,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			"comment", "makernote",
 		}
 		for _, indicator := range exifIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "exif-data-processed")
 				break
 			}
@@ -242,35 +259,31 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 
 	// Check 9: GraphQL response detection
 	if pl.GraphQL != nil {
-		lower := strings.ToLower(result.BodySnippet)
-
-		if strings.Contains(lower, `"data":{`) || strings.Contains(lower, `"data": {`) {
+		if strings.Contains(lowerBody, `"data":{`) || strings.Contains(lowerBody, `"data": {`) {
 			flags = append(flags, "graphql-mutation-accepted")
 
-			if strings.Contains(lower, `"__typename"`) || strings.Contains(lower, `"resumeid"`) {
+			if strings.Contains(lowerBody, `"__typename"`) || strings.Contains(lowerBody, `"resumeid"`) {
 				flags = append(flags, "graphql-expected-response")
 			}
 		}
 
-		if strings.Contains(lower, `"errors":[{`) || strings.Contains(lower, `"errors": [{"`) {
+		if strings.Contains(lowerBody, `"errors":[{`) || strings.Contains(lowerBody, `"errors": [{"`) {
 			flags = append(flags, "graphql-errors-returned")
 		}
 
-		if strings.Contains(lower, "/home/") || strings.Contains(lower, "/var/www/") {
+		if strings.Contains(lowerBody, "/home/") || strings.Contains(lowerBody, "/var/www/") {
 			flags = append(flags, "graphql-stack-trace-disclosed")
 		}
 
-		if strings.Contains(lower, "cannot find module") ||
-			strings.Contains(lower, "require(") ||
-			strings.Contains(lower, "node_modules") {
+		if strings.Contains(lowerBody, "cannot find module") ||
+			strings.Contains(lowerBody, "require(") ||
+			strings.Contains(lowerBody, "node_modules") {
 			flags = append(flags, "nodejs-module-error-disclosed")
 		}
 	}
 
-	// Check 10: Race condition specific detection (SET FLAGS HERE)
+	// Check 10: Race condition specific detection
 	if pl.TestType == payload.TestTypeRaceCondition {
-		lower := strings.ToLower(result.BodySnippet)
-
 		raceSuccessIndicators := []string{
 			"file uploaded",
 			"file saved",
@@ -281,7 +294,7 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			"file exists",
 		}
 		for _, indicator := range raceSuccessIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "race-condition-file-accepted")
 				break
 			}
@@ -295,15 +308,15 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			"resource temporarily unavailable",
 		}
 		for _, indicator := range concurrentIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "concurrent-access-detected")
 				break
 			}
 		}
 
-		if strings.Contains(lower, "overwrite") ||
-			strings.Contains(lower, "replace") ||
-			strings.Contains(lower, "already exists") {
+		if strings.Contains(lowerBody, "overwrite") ||
+			strings.Contains(lowerBody, "replace") ||
+			strings.Contains(lowerBody, "already exists") {
 			flags = append(flags, "file-overwrite-confirmed")
 		}
 
@@ -316,12 +329,10 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 		}
 	}
 
-	// Check 11: XXE detection (SET FLAGS HERE)
+	// Check 11: XXE detection
 	if pl.TestType == payload.TestTypeXXE {
-		lower := strings.ToLower(result.BodySnippet)
-
 		if result.StatusCode == 200 &&
-			(strings.Contains(lower, "success") || strings.Contains(lower, "uploaded")) {
+			(strings.Contains(lowerBody, "success") || strings.Contains(lowerBody, "uploaded")) {
 			flags = append(flags, "xxe-file-accepted")
 		}
 
@@ -333,28 +344,45 @@ func Analyze(baseline *Baseline, result *types.Result, pl *payload.Payload) Anal
 			"<?xml",
 		}
 		for _, indicator := range xxeSuccessIndicators {
-			if strings.Contains(lower, indicator) {
+			if strings.Contains(lowerBody, indicator) {
 				flags = append(flags, "xxe-file-disclosure")
 				break
 			}
 		}
 
-		if strings.Contains(lower, "lol") || strings.Contains(lower, "entity") {
+		if strings.Contains(lowerBody, "lol") || strings.Contains(lowerBody, "entity") {
 			flags = append(flags, "xxe-entity-expansion")
 		}
 	}
 
 	// Check 12: elFinder/WordPress File Manager specific detection
-	if strings.Contains(result.BodySnippet, `"added"`) || strings.Contains(result.ResponseBody, `"added"`) {
+	if strings.Contains(bodyToCheck, `"added"`) {
 		flags = append(flags, "elfinder-upload-success")
 		flags = append(flags, "json-indicates-success")
 
-		// Additional checks for WordPress File Manager
-		if strings.Contains(result.ResponseBody, `"url"`) {
+		if strings.Contains(bodyToCheck, `"url"`) {
 			flags = append(flags, "filepath-disclosed")
 		}
-		if strings.Contains(result.ResponseBody, pl.Filename) {
+		if strings.Contains(bodyToCheck, pl.Filename) {
 			flags = append(flags, "filename-reflected-in-response")
+		}
+	}
+
+	// Check 13: Simple upload detection (for labs and basic apps)
+	// Use FULL response body
+	if statusOK && isSuspiciousExt {
+		// Check for successful upload indicators in full body
+		if strings.Contains(lowerBody, "upload") || strings.Contains(lowerBody, "success") {
+			// Check for file path disclosure
+			if strings.Contains(lowerBody, "uploads/") ||
+				strings.Contains(lowerBody, "upload/") ||
+				strings.Contains(lowerBody, "target file:") ||
+				strings.Contains(lowerBody, "target dir:") ||
+				strings.Contains(lowerBody, ".php") ||
+				strings.Contains(lowerBody, "href=") {
+				flags = append(flags, "filepath-disclosed")
+				flags = append(flags, "html-indicates-success")
+			}
 		}
 	}
 
@@ -405,17 +433,14 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 	hasSuccessIndicator := flagSet["json-indicates-success"] ||
 		flagSet["html-indicates-success"] ||
 		flagSet["filepath-disclosed"] ||
-		flagSet["filename-reflected-in-response"]
+		flagSet["filename-reflected-in-response"] ||
+		flagSet["success-keyword-with-suspicious-ext"]
 
 	// CRITICAL FIX: WordPress File Manager / elFinder detection
-	// This MUST come before other checks to ensure proper verdict
 	if flagSet["elfinder-upload-success"] {
-		// The upload was successful via elFinder (WordPress File Manager)
 		if hasSuspiciousExt {
-			// Executable file uploaded successfully - This is RCE!
 			return VerdictVulnerable
 		}
-		// Non-executable file uploaded
 		if hasSuccessIndicator {
 			return VerdictSuspect
 		}
@@ -442,6 +467,13 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		return VerdictVulnerable
 	}
 
+	// SIMPLE UPLOAD LAB DETECTION
+	// 200 + suspicious ext + HTML success + filepath disclosed = VULNERABLE
+	if result.StatusCode == 200 && hasSuspiciousExt &&
+		flagSet["html-indicates-success"] && flagSet["filepath-disclosed"] {
+		return VerdictVulnerable
+	}
+
 	// Strong evidence: 200 + suspicious ext + success
 	if result.StatusCode == 200 && hasSuspiciousExt && hasSuccessIndicator {
 		return VerdictVulnerable
@@ -449,6 +481,14 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 
 	// Medium evidence: 200 + suspicious ext (no explicit success indicator)
 	if result.StatusCode == 200 && hasSuspiciousExt {
+		// Check if response contains upload indicators
+		bodyToCheck := strings.ToLower(result.ResponseBody)
+		if bodyToCheck == "" {
+			bodyToCheck = strings.ToLower(result.BodySnippet)
+		}
+		if strings.Contains(bodyToCheck, "upload") || strings.Contains(bodyToCheck, "success") {
+			return VerdictVulnerable
+		}
 		return VerdictSuspect
 	}
 
@@ -472,13 +512,11 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 
 // Helper function to detect WordPress File Manager RCE
 func isWordPressFileManagerRCE(result *types.Result, pl *payload.Payload) bool {
-	// Check if the response indicates a successful elFinder upload
 	if !strings.Contains(result.ResponseBody, "added") &&
 		!strings.Contains(result.ResponseBody, "success") {
 		return false
 	}
 
-	// Check if we're dealing with an executable file
 	executableExts := []string{
 		".php", ".php3", ".php4", ".php5", ".php7", ".phtml", ".pht", ".phar",
 		".jsp", ".jspx", ".asp", ".aspx", ".ashx",
@@ -486,7 +524,6 @@ func isWordPressFileManagerRCE(result *types.Result, pl *payload.Payload) bool {
 
 	for _, ext := range executableExts {
 		if strings.Contains(pl.Filename, ext) {
-			// Check if response contains the uploaded filename or URL
 			if strings.Contains(result.ResponseBody, pl.Filename) ||
 				strings.Contains(result.ResponseBody, "url") ||
 				strings.Contains(result.ResponseBody, "file") {

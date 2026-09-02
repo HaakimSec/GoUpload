@@ -325,14 +325,21 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 	r.RespLen = len(bodyBytes)
 	r.RespCT = resp.Header.Get("Content-Type")
 
-	// Capture a snippet of the body for analysis (first 500 chars)
+	// FIX: Store the FULL response body
+	// The issue was that BodySnippet only captured first 500 chars
+	// But the response might have important info beyond 500 chars
+	r.ResponseBody = string(bodyBytes)
+
+	// BodySnippet: Store full body if less than 500 chars, else first 500
+	// But ALSO store the last 500 chars to catch trailing info
 	if len(bodyBytes) > 500 {
-		r.BodySnippet = string(bodyBytes[:500])
+		// Store first 250 and last 250 chars to capture both beginning and end
+		firstPart := string(bodyBytes[:250])
+		lastPart := string(bodyBytes[len(bodyBytes)-250:])
+		r.BodySnippet = firstPart + "..." + lastPart
 	} else {
 		r.BodySnippet = string(bodyBytes)
 	}
-
-	r.ResponseBody = string(bodyBytes)
 
 	r.ResponseHeaders = make(map[string]string)
 	for key, values := range resp.Header {
@@ -462,21 +469,26 @@ func extractFinalFilename(body string) string {
 		`Stored as: `,
 		`saved as: `,
 		`File: `,
+		`Target file: `,
+		`uploads/`,
 	}
 
 	for _, pattern := range patterns {
 		if idx := strings.Index(body, pattern); idx != -1 {
 			remaining := body[idx+len(pattern):]
-			// Extract until quote, space, comma, or newline
+			// Extract until quote, space, comma, newline, or HTML tag
 			end := len(remaining)
 			for i, ch := range remaining {
-				if ch == '"' || ch == ',' || ch == ' ' || ch == '\n' || ch == '}' {
+				if ch == '"' || ch == ',' || ch == ' ' || ch == '\n' || ch == '}' || ch == '<' || ch == '\'' {
 					end = i
 					break
 				}
 			}
 			if end > 0 {
-				return remaining[:end]
+				filename := remaining[:end]
+				// Clean up the filename
+				filename = strings.Trim(filename, `"'<>`)
+				return filename
 			}
 		}
 	}
