@@ -1,20 +1,11 @@
 # Binaries
 GoUpload
-Goupload
 goupload
 *.exe
-*.exe~
-*.dll
-*.so
-*.dylib
 
 # Debug files
 debug.json
 *.debug.json
-
-# Test output
-test-results/
-*.test
 
 # Demo files
 demo_kali.gif
@@ -22,6 +13,22 @@ demo_fixed.gif
 docs/demo.cast
 docs/demo_fixed.gif
 docs/demo_frame.png
+*.gif
+
+# ML models (large files)
+ml-server/models/*.joblib
+ml-server/models/*.pkl
+ml-server/models/*.h5
+
+# Python virtual environments
+ml-server/venv/
+ml-server/myenv/
+ml-server/__pycache__/
+ml-server/*.pyc
+
+# Output files
+output/
+*.json
 
 # Build artifacts
 bin/

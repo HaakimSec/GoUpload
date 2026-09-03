@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  goupload:
+    build: .
+    image: goupload:latest
+    volumes:
+      - ./templates:/app/templates:ro
+      - ./output:/app/output
+    depends_on:
+      ml-server:
+        condition: service_healthy
+    environment:
+      - ML_SERVER_URL=http://ml-server:5000
+    networks:
+      - goupload-network
+    # Run with default help
+    command: --help
+
+  ml-server:
+    build:
+      context: ./ml-server
+      dockerfile: Dockerfile.ml
+    image: goupload-ml-server:latest
+    volumes:
+      - ./ml-server/models:/app/models:ro
+    ports:
+      - "5000:5000"
+    networks:
+      - goupload-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  goupload-network:
+    driver: bridge

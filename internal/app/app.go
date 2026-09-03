@@ -14,6 +14,7 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/config"
 	"github.com/HaakimSec/GoUpload/internal/discovery"
 	"github.com/HaakimSec/GoUpload/internal/fingerprint"
+	"github.com/HaakimSec/GoUpload/internal/ml"
 	"github.com/HaakimSec/GoUpload/internal/oracle"
 	"github.com/HaakimSec/GoUpload/internal/output"
 	"github.com/HaakimSec/GoUpload/internal/payload"
@@ -31,6 +32,7 @@ type App struct {
 	TechStack string
 	Baseline  *oracle.Baseline
 	Verifier  *verifier.RCEVerifier
+	MLClient  *ml.MLClient
 }
 
 // New creates a new App instance
@@ -52,6 +54,20 @@ func New(cfg *config.Config) *App {
 			},
 		}
 		app.Verifier = verifier.NewRCEVerifier(client, 15*time.Second)
+	}
+
+	// Initialize ML client if enabled
+	if cfg.MLEnabled {
+		app.MLClient = ml.NewMLClient(cfg.MLServerURL, true)
+		app.MLClient.MinConfidence = cfg.MLMinConfidence
+
+		// Check ML server health
+		if app.MLClient.HealthCheck() {
+			color.New(color.FgGreen).Fprintf(os.Stderr, "  🤖 ML server connected: %s\n", cfg.MLServerURL)
+		} else {
+			color.New(color.FgYellow).Fprintf(os.Stderr, "  ⚠️  ML server not reachable: %s\n", cfg.MLServerURL)
+			color.New(color.FgYellow).Fprintf(os.Stderr, "     Continuing without ML predictions.\n")
+		}
 	}
 
 	return app
@@ -105,6 +121,11 @@ func (a *App) Run() error {
 
 	a.Printer.PrintProgressNewline()
 
+	// Apply ML predictions if enabled
+	if a.Config.MLEnabled && a.MLClient != nil && a.MLClient.Enabled {
+		a.applyMLPredictions(allResults)
+	}
+
 	// Verify RCE on vulnerable results if enabled
 	if a.Config.VerifyRCE && a.Verifier != nil {
 		a.verifyRCE(allResults)
@@ -127,10 +148,91 @@ func (a *App) Run() error {
 	return a.getExitError(stats)
 }
 
+// applyMLPredictions sends features to ML server and updates results
+func (a *App) applyMLPredictions(allResults []*types.Result) {
+	flaggedCount := 0
+	for _, r := range allResults {
+		if r.Vulnerable != "" && r.Vulnerable != "SAFE" {
+			flaggedCount++
+		}
+	}
+
+	if flaggedCount == 0 {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\n  🤖 Applying ML predictions to %d findings...\n", flaggedCount)
+
+	mlUpdatedCount := 0
+	for _, r := range allResults {
+		if r.Vulnerable == "" || r.Vulnerable == "SAFE" {
+			continue
+		}
+
+		// Find the payload for this result
+		pl := findPayloadForResult(allResults, r)
+		if pl == nil {
+			continue
+		}
+
+		// Extract features
+		features := ml.ExtractFeatures(r, pl)
+		normalizedFeatures := ml.NormalizeFeatures(features)
+
+		// Get prediction from ML server
+		prediction, err := a.MLClient.Predict(normalizedFeatures)
+		if err != nil {
+			continue
+		}
+
+		// Store ML results
+		r.MLProbability = prediction.Confidence
+		r.MLConfidence = prediction.Confidence
+		r.MLLabel = prediction.Verdict
+
+		// Adjust verdict based on ML prediction
+		if prediction.Verdict == "VULNERABLE" && prediction.Confidence >= a.MLClient.MinConfidence {
+			if r.Vulnerable != "VULNERABLE" {
+				r.Vulnerable = "VULNERABLE"
+				mlUpdatedCount++
+			}
+		} else if prediction.Verdict == "SAFE" && prediction.Confidence >= 0.8 {
+			if r.Vulnerable != "SAFE" {
+				r.Vulnerable = "SAFE"
+				mlUpdatedCount++
+			}
+		} else if prediction.Verdict == "REVIEW_NEEDED" {
+			r.Flags = append(r.Flags, "ml-review-needed")
+		}
+	}
+
+	if mlUpdatedCount > 0 {
+		color.New(color.FgCyan).Fprintf(os.Stderr, "  🤖 ML updated %d verdicts\n", mlUpdatedCount)
+	}
+}
+
+// findPayloadForResult finds the payload associated with a result
+func findPayloadForResult(allResults []*types.Result, target *types.Result) *payload.Payload {
+	// This is a simplified approach - in practice, you'd map results to payloads
+	// For now, create a basic payload from the result
+	return &payload.Payload{
+		Filename:  target.Filename,
+		Extension: extractExtension(target.Filename),
+		Body:      []byte(target.ResponseBody),
+	}
+}
+
+// extractExtension gets extension from filename
+func extractExtension(filename string) string {
+	if idx := strings.LastIndex(filename, "."); idx != -1 {
+		return filename[idx:]
+	}
+	return ""
+}
+
 func (a *App) discoverUploadForms() error {
 	fmt.Fprintf(os.Stderr, "  🔍 Discovering upload forms on %s...\n", a.Config.URL)
 
-	// Create an HTTP client with cookie jar support
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
@@ -146,7 +248,6 @@ func (a *App) discoverUploadForms() error {
 }
 
 // validateTarget checks if the target is reachable
-
 func (a *App) validateTarget() error {
 	if a.Config.NoValidate {
 		return nil
@@ -334,6 +435,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 			Data:        a.Config.Data,
 			Concurrency: a.Config.Concurrency,
 			Baseline:    a.Baseline,
+			MLClient:    a.MLClient,
 		})
 		pool.SetResultHandler(output.ResultPrinter(a.Printer))
 

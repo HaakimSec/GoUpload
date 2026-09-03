@@ -45,6 +45,11 @@ type Config struct {
 	OutputFile      string
 	DiscoverMode    bool
 	VerifyRCE       bool
+
+	// ML configuration
+	MLServerURL     string
+	MLEnabled       bool
+	MLMinConfidence float64
 }
 
 // HeaderFile is the JSON structure for loading headers from a file.
@@ -79,8 +84,14 @@ func Parse() (*Config, error) {
 		outputFile      string
 		discoverMode    bool
 		verifyRCE       bool
-		showVersion     bool
-		doUpdate        bool
+
+		// ML flags
+		mlServerURL     string
+		mlEnabled       bool
+		mlMinConfidence float64
+
+		showVersion bool
+		doUpdate    bool
 	)
 
 	flag.StringVar(&url, "url", "", "Target upload endpoint URL (required)")
@@ -115,6 +126,9 @@ func Parse() (*Config, error) {
 	flag.StringVar(&moduleStr, "module", "", "Run specific modules: extension,content-type,magic-byte,filename,path-traversal,graphql,unicode,template,size-boundary,race-condition,polyglot,xxe,server-config")
 	flag.BoolVar(&verifyRCE, "verify-rce", false, "Verify RCE on vulnerable uploads")
 	flag.BoolVar(&verifyRCE, "rce", false, "Verify RCE on vulnerable uploads (shorthand)")
+	flag.StringVar(&mlServerURL, "ml-server", "http://localhost:5000", "ML server URL")
+	flag.BoolVar(&mlEnabled, "ml", false, "Enable ML predictions")
+	flag.Float64Var(&mlMinConfidence, "ml-confidence", 0.65, "Minimum ML confidence threshold")
 
 	flag.Usage = func() {
 		// Rainbow colors
@@ -177,6 +191,7 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    GoUpload --check -u http://target.com/upload\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u https://api.target.com/graphql --graphql-mutation \"mutation(\\$file:Upload!){uploadFile(file:\\$file){id}}\"\n")
 		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --verify-rce\n")
+		fmt.Fprintf(os.Stderr, "    GoUpload -u http://target.com/upload --ml --ml-server http://localhost:5000\n")
 		fmt.Fprintln(os.Stderr)
 
 		// Flags
@@ -200,6 +215,13 @@ func Parse() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "    --verify-rce  Automatically verify RCE on vulnerable uploads\n")
 		fmt.Fprintf(os.Stderr, "                   Extracts file path, checks execution, runs commands\n")
 		fmt.Fprintf(os.Stderr, "                   Adds ground truth labels for ML training\n")
+		fmt.Fprintln(os.Stderr)
+
+		// ML Info
+		bold.Fprintln(os.Stderr, "  ML INTEGRATION:")
+		fmt.Fprintf(os.Stderr, "    --ml           Enable ML predictions\n")
+		fmt.Fprintf(os.Stderr, "    --ml-server    ML server URL (default: http://localhost:5000)\n")
+		fmt.Fprintf(os.Stderr, "    --ml-confidence Minimum ML confidence threshold (default: 0.65)\n")
 		fmt.Fprintln(os.Stderr)
 	}
 
@@ -296,6 +318,11 @@ func Parse() (*Config, error) {
 		concurrency = 1
 	}
 
+	// Validate ML confidence
+	if mlMinConfidence < 0 || mlMinConfidence > 1 {
+		mlMinConfidence = 0.65
+	}
+
 	return &Config{
 		URL:             url,
 		Param:           param,
@@ -320,6 +347,11 @@ func Parse() (*Config, error) {
 		OutputFile:      outputFile,
 		DiscoverMode:    discoverMode,
 		VerifyRCE:       verifyRCE,
+
+		// ML configuration
+		MLServerURL:     mlServerURL,
+		MLEnabled:       mlEnabled,
+		MLMinConfidence: mlMinConfidence,
 	}, nil
 }
 

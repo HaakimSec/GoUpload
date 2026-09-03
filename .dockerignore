@@ -1,0 +1,31 @@
+# Git files
+.git
+.gitignore
+
+# Build artifacts
+GoUpload
+goupload
+*.exe
+
+# Output files
+output/
+data/
+*.json
+
+# ML models (large files)
+ml-server/models/*.joblib
+ml-server/models/*.pkl
+
+# Virtual environments
+ml-server/venv/
+ml-server/myenv/
+ml-server/__pycache__/
+
+# Documentation images
+docs/*.gif
+docs/*.png
+
+# IDE files
+.vscode/
+.idea/
+*.swp

@@ -60,10 +60,37 @@ go build -o GoUpload main.go
 sudo mv GoUpload /usr/local/bin/
 ```
 
-### Method 3: Docker (Coming Soon)
+### Method 3: Docker 
+
+### Quick Start
+
+```bash 
+# Build image from source (run from repository root)
+docker build -t goupload:latest .
+
+# Show version
+docker run --rm goupload:latest -v
+
+# Show help
+docker run --rm goupload:latest --help
+```
+### 1. Simple Check Scan
+
 ```bash
-docker pull haakimsec/goupload:latest
-docker run --rm haakimsec/goupload -v
+docker run --rm goupload:latest \
+  -u http://target.com/upload \
+  -p file \
+  --check
+```
+
+### 2. Full Scan
+
+```bash
+docker run --rm goupload:latest \
+  -u http://target.com/upload \
+  -p file \
+  --allow-list .jpg,.png \
+  --no-validate
 ```
 
 ## 🛠️ Usage

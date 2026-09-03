@@ -27,4 +27,7 @@ type Result struct {
 	FileURL          string        `json:"file_url,omitempty"`
 	RCECommand       string        `json:"rce_command,omitempty"`
 	VerificationTime time.Duration `json:"verification_time,omitempty"`
+	MLProbability    float64       `json:"ml_probability,omitempty"`
+	MLConfidence     float64       `json:"ml_confidence,omitempty"`
+	MLLabel          string        `json:"ml_label,omitempty"`
 }

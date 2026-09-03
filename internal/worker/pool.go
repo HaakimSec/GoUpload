@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HaakimSec/GoUpload/internal/ml"
 	"github.com/HaakimSec/GoUpload/internal/oracle"
 	"github.com/HaakimSec/GoUpload/internal/payload"
 	"github.com/HaakimSec/GoUpload/internal/types"
@@ -37,6 +38,7 @@ type PoolConfig struct {
 	Data        map[string]string
 	Concurrency int
 	Baseline    *oracle.Baseline
+	MLClient    *ml.MLClient
 }
 
 // NewPool creates a new worker pool with the given configuration.
@@ -326,12 +328,16 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 	r.RespCT = resp.Header.Get("Content-Type")
 
 	// FIX: Store the FULL response body
-	// The issue was that BodySnippet only captured first 500 chars
-	// But the response might have important info beyond 500 chars
 	r.ResponseBody = string(bodyBytes)
 
-	// BodySnippet: Store full body if less than 500 chars, else first 500
-	// But ALSO store the last 500 chars to catch trailing info
+	// BodySnippet: Store first 250 and last 250 chars to capture both beginning and end
+	if len(bodyBytes) > 500 {
+		firstPart := string(bodyBytes[:250])
+		lastPart := string(bodyBytes[len(bodyBytes)-250:])
+		r.BodySnippet = firstPart + "..." + lastPart
+	} else {
+		r.BodySnippet = string(bodyBytes)
+	}
 	if len(bodyBytes) > 500 {
 		// Store first 250 and last 250 chars to capture both beginning and end
 		firstPart := string(bodyBytes[:250])
@@ -353,10 +359,36 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 	r.FinalFilename = extractFinalFilename(r.ResponseBody)
 
 	// Run oracle analysis - ALWAYS, even without baseline
-	// This is the critical fix: previously this was skipped when baseline was nil
 	verdict := oracle.Analyze(p.config.Baseline, r, pl)
 	r.Vulnerable = string(verdict.Verdict)
 	r.Flags = verdict.Flags
+
+	// Apply ML prediction if available (Python ML server)
+	if p.config.MLClient != nil && p.config.MLClient.Enabled {
+		// Extract features
+		features := ml.ExtractFeatures(r, pl)
+		normalizedFeatures := ml.NormalizeFeatures(features)
+
+		// Get prediction from Python ML server
+		prediction, err := p.config.MLClient.Predict(normalizedFeatures)
+		if err == nil && prediction != nil {
+			// Store ML results
+			r.MLProbability = prediction.Confidence
+			r.MLConfidence = prediction.Confidence
+			r.MLLabel = prediction.Verdict
+
+			// Adjust verdict based on ML prediction
+			if prediction.Verdict == "VULNERABLE" && prediction.Confidence >= p.config.MLClient.MinConfidence {
+				r.Vulnerable = "VULNERABLE"
+				r.Flags = append(r.Flags, "ml-confirmed-vulnerable")
+			} else if prediction.Verdict == "SAFE" && prediction.Confidence >= 0.8 {
+				r.Vulnerable = "SAFE"
+				r.Flags = append(r.Flags, "ml-confirmed-safe")
+			} else if prediction.Verdict == "REVIEW_NEEDED" {
+				r.Flags = append(r.Flags, "ml-review-needed")
+			}
+		}
+	}
 
 	return r
 }
