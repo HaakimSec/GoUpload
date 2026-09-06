@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourusername/goupload/internal/types"
+	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
 func TestExtractFilePath(t *testing.T) {
@@ -43,7 +43,7 @@ func TestExtractFilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifier.extractFilePath(tt.body, tt.headers)
+			result := verifier.extractFilePath(tt.body, tt.headers, "")
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
 			}
@@ -101,19 +101,16 @@ func TestVerifyExecution(t *testing.T) {
 
 	verifier := NewRCEVerifier(server.Client(), 5*time.Second)
 
-	result := verifier.verifyExecution(server.URL + "/shell.php")
+	verified, proof := verifier.verifyExecution(server.URL + "/shell.php")
 
-	if !result.Verified {
+	if !verified {
 		t.Error("expected verification to succeed")
 	}
 
-	if result.Proof == "" {
+	if proof == "" {
 		t.Error("expected proof to be non-empty")
 	}
 
-	if result.FileURL != server.URL+"/shell.php" {
-		t.Errorf("expected file URL %s, got %s", server.URL+"/shell.php", result.FileURL)
-	}
 }
 
 func TestIsSourceVisible(t *testing.T) {
@@ -188,4 +185,3 @@ func TestVerifyRCE(t *testing.T) {
 		t.Error("expected RCE proof to be non-empty")
 	}
 }
-

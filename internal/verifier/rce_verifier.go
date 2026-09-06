@@ -54,7 +54,7 @@ func NewRCEVerifier(client *http.Client, timeout time.Duration) *RCEVerifier {
 				Type:  "html-upload",
 			},
 			{
-				Regex: regexp.MustCompile(`(?i)uploads/([a-zA-Z0-9_\-]+\.php)`),
+				Regex: regexp.MustCompile(`(?i)((?:/)?uploads/[a-zA-Z0-9_\-]+\.php)`),
 				Type:  "uploads-path",
 			},
 			{
@@ -188,7 +188,7 @@ func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, ba
 			path := matches[1]
 
 			// Normalize the path
-			if pattern.Type == "html-upload" || pattern.Type == "uploads-path" {
+			if pattern.Type == "html-upload" {
 				// Ensure it starts with /uploads/
 				if !strings.HasPrefix(path, "/") {
 					path = "/uploads/" + path
@@ -201,6 +201,9 @@ func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, ba
 
 	// Check headers for location
 	if location, ok := headers["Location"]; ok {
+		if parsed, err := url.Parse(location); err == nil && parsed.IsAbs() {
+			return location
+		}
 		for _, pattern := range v.patterns {
 			if matches := pattern.Regex.FindStringSubmatch(location); len(matches) > 1 {
 				return matches[1]
@@ -245,7 +248,14 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 		return fmt.Sprintf("%s://%s%s", base.Scheme, base.Host, filePath)
 	}
 
-	// Handle relative to current path - assume uploads directory
+	// Resolve paths relative to an endpoint directory when the base URL ends
+	// with a slash; otherwise uploaded files conventionally live in /uploads/.
+	if strings.HasSuffix(base.Path, "/") {
+		base.Path = strings.TrimSuffix(base.Path, "/") + "/"
+		resolved := base.ResolveReference(&url.URL{Path: filePath})
+		return resolved.String()
+	}
+
 	return fmt.Sprintf("%s://%s/uploads/%s", base.Scheme, base.Host, filePath)
 }
 
