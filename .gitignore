@@ -13,7 +13,7 @@ demo_fixed.gif
 docs/demo.cast
 docs/demo_fixed.gif
 docs/demo_frame.png
-*.gif
+# *.gif
 
 # ML models (large files)
 ml-server/models/*.joblib
