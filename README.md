@@ -3,9 +3,10 @@
 <p align="center">
   <img src="demo.gif" alt="GoUpload Demo" width="800"/>
 </p>
+
 **Web Application File Upload Security Tester**
 
-A high-performance, concurrent file upload vulnerability scanner written in Go. Tests for 368+ file upload vulnerabilities across 13 attack modules including extension bypass, content-type spoofing, magic bytes, path traversal, race conditions, XXE injection, GraphQL uploads, and more.
+A high-performance, concurrent file upload vulnerability scanner written in Go. Tests for 368+ file upload vulnerabilities across 13 attack mo~dules including extension bypass, content-type spoofing, magic bytes, path traversal, race conditions, XXE injection, GraphQL uploads, and more.
 
 ![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)
 ![License](https://img.shields.io/badge/License-MIT-green)
