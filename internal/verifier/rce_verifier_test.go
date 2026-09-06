@@ -48,7 +48,7 @@ func TestExtractFilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifier.extractFilePath(tt.body, tt.headers, tt.baseURL)
+			result := verifier.extractFilePath(tt.body, tt.headers)
 			if result != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, result)
 			}
@@ -111,6 +111,10 @@ func TestVerifyExecution(t *testing.T) {
 
 	if proof == "" {
 		t.Error("expected proof to be non-empty")
+	}
+
+	if result.FileURL != server.URL+"/shell.php" {
+		t.Errorf("expected file URL %s, got %s", server.URL+"/shell.php", result.FileURL)
 	}
 }
 
