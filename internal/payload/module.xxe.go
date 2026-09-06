@@ -302,4 +302,3 @@ func writeZipEntry(w *zip.Writer, name string, data []byte) {
 	f, _ := w.Create(name)
 	f.Write(data)
 }
-

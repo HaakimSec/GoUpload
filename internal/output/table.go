@@ -77,59 +77,59 @@ func (p *Printer) PrintBanner(url, param string, concurrency int, payloadCount i
 
 	fmt.Println()
 	fmt.Println()
-	
+
 	// Print rainbow logo
 	for i, line := range logo {
 		rainbowColors[i%len(rainbowColors)].Println(line)
 	}
-	
+
 	fmt.Println()
-	
+
 	// Subtitle with flames
 	subtitleColor := color.New(color.FgWhite, color.Bold)
 	flameColor := color.New(color.FgYellow, color.Bold)
-	
+
 	flameColor.Print("   ⚡ ")
 	subtitleColor.Print("Web Application File Upload Security Tester")
 	flameColor.Println(" ⚡")
-	
+
 	fmt.Println()
-	
+
 	// Version info
 	versionColor := color.New(color.FgHiWhite, color.Faint)
 	versionColor.Println("   v1.0.0  │  Built for Security Professionals  │  @haakimsec")
-	
+
 	fmt.Println()
-	
+
 	// Separator
 	dimColor.Println("  ╔══════════════════════════════════════════════════════════════════╗")
-	
+
 	// Target information
 	infoBox := color.New(color.FgWhite)
 	labelColor := color.New(color.FgCyan, color.Bold)
-	
+
 	fmt.Fprintf(color.Output, "  ║  ")
 	labelColor.Print("🎯 Target URL    ")
 	infoBox.Printf(": %-52s", truncate(url, 50))
 	fmt.Fprintf(color.Output, "║\n")
-	
+
 	fmt.Fprintf(color.Output, "  ║  ")
 	labelColor.Print("📦 Upload Param  ")
 	infoBox.Printf(": %-52s", truncate(param, 50))
 	fmt.Fprintf(color.Output, "║\n")
-	
+
 	fmt.Fprintf(color.Output, "  ║  ")
 	labelColor.Print("🚀 Concurrency   ")
 	infoBox.Printf(": %-52d", concurrency)
 	fmt.Fprintf(color.Output, "║\n")
-	
+
 	fmt.Fprintf(color.Output, "  ║  ")
 	labelColor.Print("🧪 Test Payloads ")
 	infoBox.Printf(": %-52d", payloadCount)
 	fmt.Fprintf(color.Output, "║\n")
-	
+
 	dimColor.Println("  ╚══════════════════════════════════════════════════════════════════╝")
-	
+
 	fmt.Println()
 	p.printSeparator()
 }

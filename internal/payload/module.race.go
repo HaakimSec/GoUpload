@@ -24,7 +24,7 @@ func NewRaceBarrier() *RaceBarrier {
 func (rb *RaceBarrier) AddPayload(p *Payload) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
-	
+
 	key := p.TargetFilename
 	if key == "" {
 		key = p.Filename
@@ -116,8 +116,8 @@ func moduleRace() []*Payload {
 
 	// Test 2: Concurrent uploads with identical filenames (burst test)
 	concurrentFiles := []struct {
-		filename   string
-		technique  string
+		filename  string
+		technique string
 	}{
 		{"concurrent_test.php", "Concurrent burst: 3 simultaneous uploads of same filename"},
 		{"concurrent_config.json", "Concurrent burst: config file race"},
@@ -157,14 +157,14 @@ func moduleRace() []*Payload {
 	for _, ext := range extensionRaceTests {
 		body := getPayloadForExtension(extractExtension(ext.saveName))
 		tests = append(tests, &Payload{
-			TestType:    TestTypeRaceCondition,
-			Technique:   ext.technique,
-			Filename:    fmt.Sprintf("check%s", ext.checkExt), // Filename for validation
-			TargetFilename: ext.saveName,                       // Actual save target
-			Extension:   ext.checkExt,                          // Extension the server checks
-			Body:        body,
-			ContentType: "image/jpeg",
-			Tags:        []string{"race-condition", "extension-confusion", "dual-source"},
+			TestType:       TestTypeRaceCondition,
+			Technique:      ext.technique,
+			Filename:       fmt.Sprintf("check%s", ext.checkExt), // Filename for validation
+			TargetFilename: ext.saveName,                         // Actual save target
+			Extension:      ext.checkExt,                         // Extension the server checks
+			Body:           body,
+			ContentType:    "image/jpeg",
+			Tags:           []string{"race-condition", "extension-confusion", "dual-source"},
 		})
 	}
 

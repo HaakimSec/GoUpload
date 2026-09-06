@@ -232,4 +232,3 @@ func ListAvailableTemplates(templatesDir string) {
 	}
 	fmt.Println()
 }
-

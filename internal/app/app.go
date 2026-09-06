@@ -27,12 +27,14 @@ import (
 
 // App represents the main GoUpload application
 type App struct {
-	Config    *config.Config
-	Printer   *output.Printer
-	TechStack string
-	Baseline  *oracle.Baseline
-	Verifier  *verifier.RCEVerifier
-	MLClient  *ml.MLClient
+	Config           *config.Config
+	Printer          *output.Printer
+	TechStack        string
+	Baseline         *oracle.Baseline
+	Verifier         *verifier.RCEVerifier
+	MLClient         *ml.MLClient
+	TemplateRegistry *template.TemplateRegistry // NEW: Template registry
+	TemplateExecutor *template.TemplateExecutor // NEW: Template executor
 }
 
 // New creates a new App instance
@@ -42,19 +44,17 @@ func New(cfg *config.Config) *App {
 		TechStack: cfg.TechStack,
 	}
 
+	// Initialize shared HTTP client
+	httpClient := app.getHTTPClient()
+
 	// Initialize RCE verifier if enabled
 	if cfg.VerifyRCE {
-		client := &http.Client{
-			Timeout: 15 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 10 {
-					return fmt.Errorf("too many redirects")
-				}
-				return nil
-			},
-		}
-		app.Verifier = verifier.NewRCEVerifier(client, 15*time.Second)
+		app.Verifier = verifier.NewRCEVerifier(httpClient, 15*time.Second)
 	}
+
+	// Initialize template registry and executor
+	app.TemplateRegistry = template.NewTemplateRegistry()
+	app.TemplateExecutor = template.NewTemplateExecutor(httpClient, app.TemplateRegistry)
 
 	// Initialize ML client if enabled
 	if cfg.MLEnabled {
@@ -73,11 +73,25 @@ func New(cfg *config.Config) *App {
 	return app
 }
 
+// getHTTPClient returns a shared HTTP client with sensible defaults
+func (a *App) getHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+}
+
 // Run executes the main application logic
 func (a *App) Run() error {
 	if a.Config.DiscoverMode {
 		return a.discoverUploadForms()
 	}
+
 	// Validate target
 	if err := a.validateTarget(); err != nil {
 		return err
@@ -148,6 +162,102 @@ func (a *App) Run() error {
 	return a.getExitError(stats)
 }
 
+// loadTemplates loads template payloads if specified
+func (a *App) loadTemplates() []*payload.Payload {
+	var templatePayloads []*payload.Payload
+
+	// Load single template
+	if a.Config.Template != "" {
+		payloads := a.loadSingleTemplate(a.Config.Template)
+		templatePayloads = append(templatePayloads, payloads...)
+	}
+
+	// Load template directory
+	if a.Config.TemplateDir != "" {
+		payloads := a.loadTemplateDirectory(a.Config.TemplateDir)
+		templatePayloads = append(templatePayloads, payloads...)
+	}
+
+	return templatePayloads
+}
+
+// loadSingleTemplate loads a single template (dynamic or regular)
+func (a *App) loadSingleTemplate(templatePath string) []*payload.Payload {
+	var templatePayloads []*payload.Payload
+
+	// Try loading as dynamic template first
+	dynamicTmpl, err := template.LoadDynamicTemplate(templatePath)
+	if err == nil && dynamicTmpl != nil {
+		// Register it
+		a.TemplateRegistry.Register(dynamicTmpl)
+
+		fmt.Printf("  📄 Loaded dynamic template: %s", dynamicTmpl.Name)
+
+		// Show type and CVE if available
+		if dynamicTmpl.Type != "" {
+			fmt.Printf(" [%s]", dynamicTmpl.Type)
+		}
+		if dynamicTmpl.CVE != "" {
+			fmt.Printf(" [%s]", dynamicTmpl.CVE)
+		}
+		fmt.Println()
+
+		// Execute dynamic template if it has multi-step requests
+		if len(dynamicTmpl.Requests) > 0 {
+			fmt.Printf("  🔄 Executing %d-step attack sequence...\n", len(dynamicTmpl.Requests))
+
+			result, err := a.TemplateExecutor.ExecuteDynamicTemplate(dynamicTmpl, a.Config.URL)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠️  Dynamic template execution failed: %s\n", err)
+			} else {
+				fmt.Printf("  ✅ Template execution result: %s\n", result.Verdict)
+
+				// Convert execution result to payloads for GoUpload pipeline
+				for _, payload := range dynamicTmpl.ToPayloads() {
+					templatePayloads = append(templatePayloads, payload)
+				}
+			}
+		} else {
+			// Dynamic template without multi-step (backward compatible)
+			for _, payload := range dynamicTmpl.ToPayloads() {
+				templatePayloads = append(templatePayloads, payload)
+			}
+		}
+	} else {
+		// Fall back to regular template
+		tmpl, err := template.LoadTemplate(templatePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading template: %s\n", err)
+			os.Exit(1)
+		}
+
+		templatePayloads = tmpl.ToPayloads()
+		fmt.Printf("  📄 Loaded template: %s (%d payloads)\n", tmpl.Name, len(templatePayloads))
+	}
+
+	return templatePayloads
+}
+
+// loadTemplateDirectory loads all templates from a directory
+func (a *App) loadTemplateDirectory(templateDir string) []*payload.Payload {
+	var templatePayloads []*payload.Payload
+
+	// Use registry for directory loading
+	err := a.TemplateRegistry.LoadDirectory(templateDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading templates directory: %s\n", err)
+		return templatePayloads
+	}
+
+	allTemplates := a.TemplateRegistry.GetAll()
+	for _, tmpl := range allTemplates {
+		templatePayloads = append(templatePayloads, tmpl.ToPayloads()...)
+		fmt.Printf("  📄 Loaded template: %s\n", tmpl.Name)
+	}
+
+	return templatePayloads
+}
+
 // applyMLPredictions sends features to ML server and updates results
 func (a *App) applyMLPredictions(allResults []*types.Result) {
 	flaggedCount := 0
@@ -213,8 +323,6 @@ func (a *App) applyMLPredictions(allResults []*types.Result) {
 
 // findPayloadForResult finds the payload associated with a result
 func findPayloadForResult(allResults []*types.Result, target *types.Result) *payload.Payload {
-	// This is a simplified approach - in practice, you'd map results to payloads
-	// For now, create a basic payload from the result
 	return &payload.Payload{
 		Filename:  target.Filename,
 		Extension: extractExtension(target.Filename),
@@ -230,13 +338,11 @@ func extractExtension(filename string) string {
 	return ""
 }
 
+// discoverUploadForms discovers upload forms on the target
 func (a *App) discoverUploadForms() error {
 	fmt.Fprintf(os.Stderr, "  🔍 Discovering upload forms on %s...\n", a.Config.URL)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
+	client := a.getHTTPClient()
 	parser := discovery.NewHTMLFormParser(client)
 	result, err := parser.DiscoverFromURL(a.Config.URL, a.Config.Headers)
 	if err != nil {
@@ -311,35 +417,6 @@ func (a *App) fingerprint() {
 	}
 }
 
-// loadTemplates loads template payloads if specified
-func (a *App) loadTemplates() []*payload.Payload {
-	var templatePayloads []*payload.Payload
-
-	if a.Config.Template != "" {
-		tmpl, err := template.LoadTemplate(a.Config.Template)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading template: %s\n", err)
-			os.Exit(1)
-		}
-		templatePayloads = tmpl.ToPayloads()
-		fmt.Printf("  📄 Loaded template: %s (%d payloads)\n", tmpl.Name, len(templatePayloads))
-	}
-
-	if a.Config.TemplateDir != "" {
-		templates, err := template.LoadTemplates(a.Config.TemplateDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading templates: %s\n", err)
-		} else {
-			for _, tmpl := range templates {
-				templatePayloads = append(templatePayloads, tmpl.ToPayloads()...)
-				fmt.Printf("  📄 Loaded template: %s\n", tmpl.Name)
-			}
-		}
-	}
-
-	return templatePayloads
-}
-
 // selectModules enables only specified modules
 func (a *App) selectModules() {
 	if len(a.Config.Modules) > 0 {
@@ -388,6 +465,7 @@ func (a *App) establishBaseline() {
 	}
 }
 
+// executeTests executes all payloads
 func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 	modules := groupByModule(allPayloads)
 	allResults := make([]*types.Result, 0, len(allPayloads))
@@ -535,7 +613,6 @@ func (a *App) printResults(allResults []*types.Result) {
 			continue
 		}
 
-		// Filter flagged results
 		var flagged []*types.Result
 		for _, r := range results {
 			if r.Vulnerable != string(oracle.VerdictSafe) && r.Vulnerable != "" {
@@ -544,9 +621,7 @@ func (a *App) printResults(allResults []*types.Result) {
 		}
 
 		if len(flagged) > 0 {
-			// Executive summary
 			output.PrintExecutiveSummary(moduleNames[modType], flagged)
-			// Findings table
 			output.PrintFindingsTable(moduleNames[modType], flagged)
 		}
 	}

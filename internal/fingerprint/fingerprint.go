@@ -9,11 +9,11 @@ import (
 
 // TechStack represents the detected technology stack of the target
 type TechStack struct {
-	Server      string // Apache, Nginx, IIS, Express, Tomcat, etc.
-	Language    string // PHP, ASP.NET, Java, Node.js, Python, Ruby
-	Framework   string // Laravel, Express, Django, Rails, Spring
-	OS          string // Linux, Windows
-	Confidence  int    // 0-100% confidence level
+	Server     string // Apache, Nginx, IIS, Express, Tomcat, etc.
+	Language   string // PHP, ASP.NET, Java, Node.js, Python, Ruby
+	Framework  string // Laravel, Express, Django, Rails, Spring
+	OS         string // Linux, Windows
+	Confidence int    // 0-100% confidence level
 }
 
 // Fingerprint performs passive reconnaissance on the target URL
@@ -33,7 +33,7 @@ func Fingerprint(targetURL string, headers map[string]string) (*TechStack, error
 
 	// Set User-Agent
 	req.Header.Set("User-Agent", "GoUpload-Fingerprint/1.0")
-	
+
 	// Add custom headers if provided
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -196,7 +196,7 @@ func parsePoweredBy(poweredBy string) string {
 func printFingerprintResults(ts *TechStack, evidence []string) {
 	fmt.Println()
 	fmt.Println("  ┌─ TARGET FINGERPRINT ─────────────────────────────────────────────┐")
-	
+
 	if ts.Server != "" {
 		fmt.Printf("  │  🖥  Server      : %-50s │\n", ts.Server)
 	}
@@ -209,7 +209,7 @@ func printFingerprintResults(ts *TechStack, evidence []string) {
 	if ts.Confidence > 0 {
 		fmt.Printf("  │  📊 Confidence  : %d%% %-47s │\n", ts.Confidence, "")
 	}
-	
+
 	if len(evidence) > 0 {
 		fmt.Println("  │                                                                  │")
 		fmt.Println("  │  Evidence:                                                       │")
@@ -220,7 +220,7 @@ func printFingerprintResults(ts *TechStack, evidence []string) {
 			fmt.Printf("  │    • %-60s │\n", ev)
 		}
 	}
-	
+
 	fmt.Println("  └──────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }

