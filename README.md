@@ -1,7 +1,7 @@
 # GoUpload 🚀
 
 <p align="center">
-  <img src="demo.gif" alt="GoUpload Demo" width="800"/>
+  <img src="assets/gifs/demo.gif" alt="GoUpload Demo" width="800"/>
 </p>
 
 **Web Application File Upload Security Tester**
