@@ -581,17 +581,27 @@ func FormatFlags(flags []string) string {
 
 // SummaryStats provides aggregate statistics for the test run.
 type SummaryStats struct {
-	Total      int
-	Safe       int
-	Suspect    int
-	Vulnerable int
-	Errors     int
-	Duration   float64
+	Total        int
+	Safe         int
+	Suspect      int
+	Vulnerable   int
+	Errors       int
+	Duration     float64
+	ErrorDetails []ErrorDetail `json:"error_details,omitempty"`
+}
+
+type ErrorDetail struct {
+	Filename  string `json:"filename"`
+	Technique string `json:"technique"`
+	Error     string `json:"error"`
+	ErrorType string `json:"error_type,omitempty"`
+	Status    int    `json:"status_code,omitempty"`
 }
 
 // ComputeSummary calculates aggregate statistics from a slice of results.
 func ComputeSummary(results []*types.Result) SummaryStats {
 	stats := SummaryStats{Total: len(results)}
+
 	for _, r := range results {
 		switch r.Vulnerable {
 		case string(VerdictVulnerable):
@@ -600,12 +610,24 @@ func ComputeSummary(results []*types.Result) SummaryStats {
 			stats.Suspect++
 		case string(VerdictSafe):
 			stats.Safe++
-		case string(VerdictError):
+		default: // covers VerdictError, VerdictUnknown, and anything unrecognized
 			stats.Errors++
-		default:
-			stats.Errors++
+
+			detail := ErrorDetail{
+				Filename:  r.Filename,
+				Technique: r.Technique,
+				Status:    r.StatusCode,
+				ErrorType: string(r.ErrType),
+			}
+			if r.Err != nil {
+				detail.Error = r.Err.Error()
+			} else {
+				detail.Error = fmt.Sprintf("unclassified verdict: %q", r.Vulnerable)
+			}
+			stats.ErrorDetails = append(stats.ErrorDetails, detail)
 		}
 	}
+
 	if len(results) > 0 {
 		var total float64
 		for _, r := range results {
@@ -613,6 +635,7 @@ func ComputeSummary(results []*types.Result) SummaryStats {
 		}
 		stats.Duration = math.Round(total/float64(len(results))*1000) / 1000
 	}
+
 	return stats
 }
 

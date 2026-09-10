@@ -26,18 +26,19 @@ type JSONReport struct {
 
 // JSONSummary contains scan statistics
 type JSONSummary struct {
-	TotalTests       int     `json:"total_tests"`
-	Safe             int     `json:"safe"`
-	Suspect          int     `json:"suspect"`
-	Vulnerable       int     `json:"vulnerable"`
-	Errors           int     `json:"errors"`
-	DetectionRate    float64 `json:"detection_rate_percent"`
-	AvgResponseTime  float64 `json:"avg_response_time_seconds"`
-	TotalElapsed     string  `json:"total_elapsed"`
-	RCEVerified      int     `json:"rce_verified,omitempty"`
-	RCEUnverified    int     `json:"rce_unverified,omitempty"`
-	RCETruePositive  int     `json:"rce_true_positive,omitempty"`
-	RCEFalsePositive int     `json:"rce_false_positive,omitempty"`
+	TotalTests       int                  `json:"total_tests"`
+	Safe             int                  `json:"safe"`
+	Suspect          int                  `json:"suspect"`
+	Vulnerable       int                  `json:"vulnerable"`
+	Errors           int                  `json:"errors"`
+	DetectionRate    float64              `json:"detection_rate_percent"`
+	AvgResponseTime  float64              `json:"avg_response_time_seconds"`
+	TotalElapsed     string               `json:"total_elapsed"`
+	RCEVerified      int                  `json:"rce_verified,omitempty"`
+	RCEUnverified    int                  `json:"rce_unverified,omitempty"`
+	RCETruePositive  int                  `json:"rce_true_positive,omitempty"`
+	RCEFalsePositive int                  `json:"rce_false_positive,omitempty"`
+	ErrorDetails     []oracle.ErrorDetail `json:"error_details,omitempty"`
 }
 
 // JSONFinding represents a single vulnerability finding
@@ -227,6 +228,7 @@ func (jp *JSONPrinter) SetSummary(stats oracle.SummaryStats) {
 		Suspect:         stats.Suspect,
 		Vulnerable:      stats.Vulnerable,
 		Errors:          stats.Errors,
+		ErrorDetails:    stats.ErrorDetails,
 		DetectionRate:   roundFloat(detectionRate, 1),
 		AvgResponseTime: roundFloat(stats.Duration, 3),
 		TotalElapsed:    fmt.Sprintf("%.3fs", stats.Duration),

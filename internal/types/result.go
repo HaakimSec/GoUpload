@@ -30,4 +30,14 @@ type Result struct {
 	MLProbability    float64       `json:"ml_probability,omitempty"`
 	MLConfidence     float64       `json:"ml_confidence,omitempty"`
 	MLLabel          string        `json:"ml_label,omitempty"`
+	ErrType          ErrorType     `json:"error_type,omitempty"`
 }
+
+type ErrorType string
+
+const (
+	ErrTimeout    ErrorType = "timeout"
+	ErrConnection ErrorType = "connection"
+	ErrValidation ErrorType = "validation"
+	ErrOther      ErrorType = "other"
+)

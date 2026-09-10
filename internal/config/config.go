@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+
+	"github.com/HaakimSec/GoUpload/internal/output"
 )
 
 const Version = "1.8.0"
@@ -45,6 +47,7 @@ type Config struct {
 	OutputFile      string
 	DiscoverMode    bool
 	VerifyRCE       bool
+	Debug           bool
 
 	// ML configuration
 	MLServerURL     string
@@ -68,6 +71,7 @@ func Parse() (*Config, error) {
 		concurrency     int
 		techStack       string
 		autoDetect      bool
+		debug           bool
 		checkOnly       bool
 		noValidate      bool
 		graphqlMutation string
@@ -111,6 +115,7 @@ func Parse() (*Config, error) {
 	flag.BoolVar(&checkOnly, "check", false, "Only validate target connectivity (no payloads)")
 	flag.BoolVar(&checkOnly, "C", false, "Only validate target connectivity (shorthand)")
 	flag.BoolVar(&noValidate, "no-validate", false, "Skip target validation before testing")
+	flag.BoolVar(&debug, "debug", false, "Show detailed error info (full response body, error chain) for failed tests")
 	flag.StringVar(&graphqlMutation, "graphql-mutation", "", "Custom GraphQL mutation string")
 	flag.StringVar(&graphqlVariable, "graphql-variable", "file", "GraphQL variable name for file")
 	flag.BoolVar(&moduleOverwrite, "module-overwrite", false, "Enable Node.js module overwrite payloads")
@@ -131,44 +136,7 @@ func Parse() (*Config, error) {
 	flag.Float64Var(&mlMinConfidence, "ml-confidence", 0.65, "Minimum ML confidence threshold")
 
 	flag.Usage = func() {
-		// Rainbow colors
-		rainbowColors := []*color.Color{
-			color.New(color.FgRed, color.Bold),
-			color.New(color.FgYellow, color.Bold),
-			color.New(color.FgGreen, color.Bold),
-			color.New(color.FgCyan, color.Bold),
-			color.New(color.FgBlue, color.Bold),
-			color.New(color.FgMagenta, color.Bold),
-		}
-
-		// Rainbow ASCII Art Banner
-		logo := []string{
-			"   ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ",
-			"  ██╔════╝ ██╔═══██╗██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗",
-			"  ██║  ███╗██║   ██║██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║",
-			"  ██║   ██║██║   ██║██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║",
-			"  ╚██████╔╝╚██████╔╝╚██████╔╝██║     ███████╗╚██████╔╝██║  ██║██████╔╝",
-			"   ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ",
-		}
-
-		fmt.Fprintln(os.Stderr)
-		for i, line := range logo {
-			rainbowColors[i%len(rainbowColors)].Fprintln(os.Stderr, line)
-		}
-		fmt.Fprintln(os.Stderr)
-
-		// Subtitle
-		subtitle := color.New(color.FgWhite, color.Bold)
-		flame := color.New(color.FgYellow, color.Bold)
-		flame.Fprint(os.Stderr, "   ⚡ ")
-		subtitle.Fprint(os.Stderr, "Web Application File Upload Security Tester")
-		flame.Fprintln(os.Stderr, " ⚡")
-		fmt.Fprintln(os.Stderr)
-
-		// Version
-		version := color.New(color.FgHiWhite, color.Faint)
-		version.Fprintf(os.Stderr, "   v%s  │  Built for Security Professionals  │  @haakimsec\n", Version)
-		fmt.Fprintln(os.Stderr)
+		output.PrintLogo(os.Stderr, Version)
 
 		// Separator
 		dim := color.New(color.FgHiBlack)
@@ -334,6 +302,7 @@ func Parse() (*Config, error) {
 		AutoDetect:      autoDetect || techStack == "auto",
 		CheckOnly:       checkOnly,
 		NoValidate:      noValidate,
+		Debug:           debug,
 		GraphQLMutation: graphqlMutation,
 		GraphQLVariable: graphqlVariable,
 		ModuleOverwrite: moduleOverwrite,

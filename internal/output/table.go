@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,32 @@ type Printer struct {
 	showProgress bool
 }
 
+// PrintLogo writes the GoUpload ASCII logo and subtitle to the given writer.
+// Shared by the scan banner and --help output so both stay visually consistent.
+func PrintLogo(w io.Writer, version string) {
+	logo := []string{
+		"   ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ",
+		"  ██╔════╝ ██╔═══██╗██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗",
+		"  ██║  ███╗██║   ██║██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║",
+		"  ██║   ██║██║   ██║██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║",
+		"  ╚██████╔╝╚██████╔╝╚██████╔╝██║     ███████╗╚██████╔╝██║  ██║██████╔╝",
+		"   ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ",
+	}
+
+	logoColor := color.New(color.FgCyan, color.Bold)
+	subtitleColor := color.New(color.FgWhite)
+	versionColor := color.New(color.FgWhite, color.Faint)
+
+	fmt.Fprintln(w)
+	for _, line := range logo {
+		logoColor.Fprintln(w, line)
+	}
+	fmt.Fprintln(w)
+	subtitleColor.Fprintln(w, "   Web application file upload security tester")
+	versionColor.Fprintf(w, "   v%s  │  @haakimsec\n", version)
+	fmt.Fprintln(w)
+}
+
 // NewPrinter creates a new output printer.
 func NewPrinter(total int) *Printer {
 	return &Printer{
@@ -50,88 +77,34 @@ func NewPrinter(total int) *Printer {
 	}
 }
 
-// PrintBanner displays the RAINBOW GoUpload banner with target information.
-func (p *Printer) PrintBanner(url, param string, concurrency int, payloadCount int) {
+func (p *Printer) PrintBanner(url, param, version string, concurrency int, payloadCount int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Rainbow colors for the ASCII art
-	rainbowColors := []*color.Color{
-		color.New(color.FgRed, color.Bold),
-		color.New(color.FgYellow, color.Bold),
-		color.New(color.FgGreen, color.Bold),
-		color.New(color.FgCyan, color.Bold),
-		color.New(color.FgBlue, color.Bold),
-		color.New(color.FgMagenta, color.Bold),
-	}
+	PrintLogo(color.Output, version)
 
-	// ASCII Art Logo
-	logo := []string{
-		"   ██████╗  ██████╗ ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ",
-		"  ██╔════╝ ██╔═══██╗██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗",
-		"  ██║  ███╗██║   ██║██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║",
-		"  ██║   ██║██║   ██║██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║",
-		"  ╚██████╔╝╚██████╔╝╚██████╔╝██║     ███████╗╚██████╔╝██║  ██║██████╔╝",
-		"   ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ",
-	}
-
-	fmt.Println()
-	fmt.Println()
-
-	// Print rainbow logo
-	for i, line := range logo {
-		rainbowColors[i%len(rainbowColors)].Println(line)
-	}
-
-	fmt.Println()
-
-	// Subtitle with flames
-	subtitleColor := color.New(color.FgWhite, color.Bold)
-	flameColor := color.New(color.FgYellow, color.Bold)
-
-	flameColor.Print("   ⚡ ")
-	subtitleColor.Print("Web Application File Upload Security Tester")
-	flameColor.Println(" ⚡")
-
-	fmt.Println()
-
-	// Version info
-	versionColor := color.New(color.FgHiWhite, color.Faint)
-	versionColor.Println("   v1.0.0  │  Built for Security Professionals  │  @haakimsec")
-
-	fmt.Println()
-
-	// Separator
-	dimColor.Println("  ╔══════════════════════════════════════════════════════════════════╗")
-
-	// Target information
+	labelColor := color.New(color.FgCyan)
 	infoBox := color.New(color.FgWhite)
-	labelColor := color.New(color.FgCyan, color.Bold)
 
-	fmt.Fprintf(color.Output, "  ║  ")
-	labelColor.Print("🎯 Target URL    ")
-	infoBox.Printf(": %-52s", truncate(url, 50))
-	fmt.Fprintf(color.Output, "║\n")
+	dimColor.Fprintln(color.Output, "  ┌──────────────────────────────────────────────────────────────────┐")
 
-	fmt.Fprintf(color.Output, "  ║  ")
-	labelColor.Print("📦 Upload Param  ")
-	infoBox.Printf(": %-52s", truncate(param, 50))
-	fmt.Fprintf(color.Output, "║\n")
+	printConfigLine(labelColor, infoBox, "TARGET", truncate(url, 52))
+	printConfigLine(labelColor, infoBox, "PARAM", truncate(param, 52))
+	printConfigLine(labelColor, infoBox, "WORKERS", fmt.Sprintf("%d", concurrency))
+	printConfigLine(labelColor, infoBox, "PAYLOADS", fmt.Sprintf("%d", payloadCount))
 
-	fmt.Fprintf(color.Output, "  ║  ")
-	labelColor.Print("🚀 Concurrency   ")
-	infoBox.Printf(": %-52d", concurrency)
-	fmt.Fprintf(color.Output, "║\n")
-
-	fmt.Fprintf(color.Output, "  ║  ")
-	labelColor.Print("🧪 Test Payloads ")
-	infoBox.Printf(": %-52d", payloadCount)
-	fmt.Fprintf(color.Output, "║\n")
-
-	dimColor.Println("  ╚══════════════════════════════════════════════════════════════════╝")
+	dimColor.Fprintln(color.Output, "  └──────────────────────────────────────────────────────────────────┘")
 
 	fmt.Println()
 	p.printSeparator()
+}
+
+// printConfigLine renders one aligned label/value row inside the config box.
+func printConfigLine(labelColor, valueColor *color.Color, label, value string) {
+	fmt.Fprintf(color.Output, "  │  ")
+	labelColor.Fprintf(color.Output, "%-10s", label)
+	valueColor.Fprintf(color.Output, "%-56s", value)
+	fmt.Fprintln(color.Output, "│")
 }
 
 // PrintBaseline displays baseline upload results.
@@ -139,14 +112,14 @@ func (p *Printer) PrintBaseline(baseline *oracle.Baseline) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	moduleColor.Fprintln(color.Output, "  [BASELINE] Establishing upload baseline...")
-	fmt.Println()
-	fmt.Fprintf(color.Output, "    %-18s %s\n", "Filename:", baseline.Filename)
-	fmt.Fprintf(color.Output, "    %-18s %s\n", "Status Code:",
+	moduleColor.Fprintln(color.Output, "  ┌─ BASELINE")
+	moduleColor.Fprintln(color.Output, "  │")
+	fmt.Fprintf(color.Output, "  │  %-16s %s\n", "filename", baseline.Filename)
+	fmt.Fprintf(color.Output, "  │  %-16s %s\n", "status",
 		statusColor(baseline.StatusCode)(fmt.Sprintf("%d %s", baseline.StatusCode, statusText(baseline.StatusCode))))
-	fmt.Fprintf(color.Output, "    %-18s %d bytes\n", "Response Length:", baseline.ResponseLength)
-	fmt.Fprintf(color.Output, "    %-18s %s\n", "Content-Type:", baseline.ContentType)
-	fmt.Println()
+	fmt.Fprintf(color.Output, "  │  %-16s %d bytes\n", "response length", baseline.ResponseLength)
+	fmt.Fprintf(color.Output, "  │  %-16s %s\n", "content-type", baseline.ContentType)
+	fmt.Fprintln(color.Output, "  │")
 	p.printSeparator()
 }
 
@@ -198,20 +171,21 @@ func (p *Printer) PrintFinalResult(r *types.Result, idx int) {
 
 	fmt.Fprintf(color.Output, "  │  #%02d  %-55s %s\n",
 		idx, truncate(r.Technique, 55), verdictStr)
-	fmt.Fprintf(color.Output, "  │       %-18s %s\n", "Filename:", r.Filename)
-	fmt.Fprintf(color.Output, "  │       %-18s %s\n", "Status:", statusStr)
-	fmt.Fprintf(color.Output, "  │       %-18s %d bytes\n", "Response Length:", r.RespLen)
+
+	fmt.Fprintf(color.Output, "  │       %-16s %s\n", "filename", r.Filename)
+	fmt.Fprintf(color.Output, "  │       %-16s %s\n", "status", statusStr)
+	fmt.Fprintf(color.Output, "  │       %-16s %d bytes\n", "response length", r.RespLen)
 
 	if r.Duration > 0 {
-		fmt.Fprintf(color.Output, "  │       %-18s %s\n", "Duration:", r.Duration.Truncate(time.Millisecond).String())
+		fmt.Fprintf(color.Output, "  │       %-16s %s\n", "duration", r.Duration.Truncate(time.Millisecond).String())
 	}
 
 	if len(r.Flags) > 0 {
-		fmt.Fprintf(color.Output, "  │       %-18s %s\n", "Flags:", oracle.FormatFlags(r.Flags))
+		fmt.Fprintf(color.Output, "  │       %-16s %s\n", "flags", oracle.FormatFlags(r.Flags))
 	}
 
 	if r.Err != nil {
-		fmt.Fprintf(color.Output, "  │       %-18s %s\n", "Error:", r.Err.Error())
+		fmt.Fprintf(color.Output, "  │       %-16s %s\n", "error", r.Err.Error())
 	}
 
 	fmt.Fprintln(color.Output, "  │")
@@ -237,6 +211,38 @@ func (p *Printer) PrintSummary(stats oracle.SummaryStats) {
 	fmt.Fprintf(color.Output, "    %-22s %s\n", "Errors:", errorFn(fmt.Sprintf("%d", stats.Errors)))
 	fmt.Fprintf(color.Output, "    %-22s %s\n", "Avg Response Time:", fmt.Sprintf("%.3fs", stats.Duration))
 	fmt.Fprintf(color.Output, "    %-22s %s\n", "Total Elapsed:", elapsed.String())
+
+	// NEW: Error details section
+	if stats.Errors > 0 && len(stats.ErrorDetails) > 0 {
+		fmt.Println()
+		headerColor.Fprintln(color.Output, "  ERROR DETAILS")
+		fmt.Println()
+
+		maxShown := 10
+		if len(stats.ErrorDetails) < maxShown {
+			maxShown = len(stats.ErrorDetails)
+		}
+
+		for i := 0; i < maxShown; i++ {
+			d := stats.ErrorDetails[i]
+			fmt.Fprintf(color.Output, "    [%d] %s\n", i+1, errorFn(d.Filename))
+			fmt.Fprintf(color.Output, "        %-11s %s\n", "Technique:", d.Technique)
+			if d.ErrorType != "" {
+				fmt.Fprintf(color.Output, "        %-11s %s\n", "Type:", d.ErrorType)
+			}
+			fmt.Fprintf(color.Output, "        %-11s %s\n", "Error:", d.Error)
+			if d.Status > 0 {
+				fmt.Fprintf(color.Output, "        %-11s %d\n", "Status:", d.Status)
+			}
+			fmt.Println()
+		}
+
+		if len(stats.ErrorDetails) > maxShown {
+			remaining := len(stats.ErrorDetails) - maxShown
+			fmt.Fprintf(color.Output, "    %s\n", errorFn(fmt.Sprintf("... and %d more error(s) (see --output json for full list)", remaining)))
+			fmt.Println()
+		}
+	}
 
 	if stats.Vulnerable > 0 || stats.Suspect > 0 {
 		fmt.Println()
@@ -288,7 +294,7 @@ func formatVerdict(v string) string {
 	case oracle.VerdictError:
 		return errorFn("✗  ERROR")
 	default:
-		return "  UNKNOWN"
+		return errorFn("?  UNKNOWN")
 	}
 }
 

@@ -2,6 +2,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -123,7 +124,7 @@ func (a *App) Run() error {
 
 	// Initialize printer
 	a.Printer = output.NewPrinter(len(allPayloads))
-	a.Printer.PrintBanner(a.Config.URL, a.Config.Param, a.Config.Concurrency, len(allPayloads))
+	a.Printer.PrintBanner(a.Config.URL, a.Config.Param, config.Version, a.Config.Concurrency, len(allPayloads))
 
 	a.printTechStackInfo(len(allPayloads))
 
@@ -152,6 +153,12 @@ func (a *App) Run() error {
 	stats := oracle.ComputeSummary(allResults)
 	a.Printer.PrintSummary(stats)
 
+	if a.Config.Debug && stats.Errors > 0 {
+		a.printDebugErrors(allResults)
+	}
+
+	a.handleJSONOutput(allResults, stats)
+
 	// JSON output
 	a.handleJSONOutput(allResults, stats)
 
@@ -160,6 +167,38 @@ func (a *App) Run() error {
 
 	// Exit code
 	return a.getExitError(stats)
+}
+
+// printDebugErrors prints full diagnostic detail for every failed test
+// when --debug is enabled: the full wrapped error chain and response context.
+func (a *App) printDebugErrors(results []*types.Result) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  ─── DEBUG: FULL ERROR DIAGNOSTICS ───")
+
+	for _, r := range results {
+		if r.Err == nil {
+			continue
+		}
+
+		fmt.Fprintf(os.Stderr, "\n  %s (%s)\n", r.Filename, r.Technique)
+
+		// Walk the full wrapped error chain, innermost cause last
+		fmt.Fprintln(os.Stderr, "    Error chain:")
+		for e := r.Err; e != nil; e = errors.Unwrap(e) {
+			fmt.Fprintf(os.Stderr, "      -> %s\n", e.Error())
+		}
+
+		if r.StatusCode > 0 {
+			fmt.Fprintf(os.Stderr, "    Status: %d\n", r.StatusCode)
+		}
+		if r.RespCT != "" {
+			fmt.Fprintf(os.Stderr, "    Content-Type: %s\n", r.RespCT)
+		}
+		if r.BodySnippet != "" {
+			fmt.Fprintf(os.Stderr, "    Body snippet: %s\n", r.BodySnippet)
+		}
+	}
+	fmt.Fprintln(os.Stderr)
 }
 
 // loadTemplates loads template payloads if specified
