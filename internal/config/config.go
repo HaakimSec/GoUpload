@@ -13,7 +13,7 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/output"
 )
 
-const Version = "1.8.0"
+const Version = "1.8.1"
 
 func runUpdate() error {
 	cmd := exec.Command("go", "install", "github.com/HaakimSec/GoUpload@latest")
