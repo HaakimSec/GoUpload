@@ -1,0 +1,31 @@
+# ML Training Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ML dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional training libraries
+RUN pip install --no-cache-dir \
+    pandas \
+    matplotlib \
+    seaborn \
+    jupyter
+
+# Copy training scripts
+COPY train_model.py .
+COPY build_dataset.py .
+COPY augment_data.py .
+
+# Create directories
+RUN mkdir -p /app/models /app/datasets
+
+# Default command
+CMD ["python3", "train_model.py", "--help"]
