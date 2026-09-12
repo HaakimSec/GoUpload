@@ -45,8 +45,9 @@ var ModuleRegistry = []ModuleInfo{
 	{
 		Name:        "graphql",
 		Description: "GraphQL File Uploads",
-		TestType:    TestTypeExtensionEvasion, // GraphQL uses multiple types
-		Enabled:     true,
+		TestType:    TestTypeGraphQL,
+
+		Enabled: true,
 	},
 	{
 		Name:        "unicode",

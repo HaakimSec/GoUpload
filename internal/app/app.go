@@ -1,4 +1,3 @@
-// internal/app/app.go
 package app
 
 import (
@@ -34,8 +33,8 @@ type App struct {
 	Baseline         *oracle.Baseline
 	Verifier         *verifier.RCEVerifier
 	MLClient         *ml.MLClient
-	TemplateRegistry *template.TemplateRegistry // NEW: Template registry
-	TemplateExecutor *template.TemplateExecutor // NEW: Template executor
+	TemplateRegistry *template.TemplateRegistry
+	TemplateExecutor *template.TemplateExecutor
 }
 
 // New creates a new App instance
@@ -45,24 +44,19 @@ func New(cfg *config.Config) *App {
 		TechStack: cfg.TechStack,
 	}
 
-	// Initialize shared HTTP client
 	httpClient := app.getHTTPClient()
 
-	// Initialize RCE verifier if enabled
 	if cfg.VerifyRCE {
 		app.Verifier = verifier.NewRCEVerifier(httpClient, 15*time.Second)
 	}
 
-	// Initialize template registry and executor
 	app.TemplateRegistry = template.NewTemplateRegistry()
 	app.TemplateExecutor = template.NewTemplateExecutor(httpClient, app.TemplateRegistry)
 
-	// Initialize ML client if enabled
 	if cfg.MLEnabled {
 		app.MLClient = ml.NewMLClient(cfg.MLServerURL, true)
 		app.MLClient.MinConfidence = cfg.MLMinConfidence
 
-		// Check ML server health
 		if app.MLClient.HealthCheck() {
 			color.New(color.FgGreen).Fprintf(os.Stderr, "  🤖 ML server connected: %s\n", cfg.MLServerURL)
 		} else {
@@ -93,63 +87,49 @@ func (a *App) Run() error {
 		return a.discoverUploadForms()
 	}
 
-	// Validate target
 	if err := a.validateTarget(); err != nil {
 		return err
 	}
 
-	// Check only mode
 	if a.Config.CheckOnly {
 		a.printCheckSuccess()
 		return nil
 	}
 
-	// Fingerprint target
 	a.fingerprint()
 
-	// List templates or modules
 	if a.Config.ListTemplates {
 		template.ListAvailableTemplates("templates/")
 		return nil
 	}
 
-	// Load templates
 	templatePayloads := a.loadTemplates()
 
-	// Module selection
 	a.selectModules()
 
-	// Generate payloads
 	allPayloads := a.generatePayloads(templatePayloads)
 
-	// Initialize printer
 	a.Printer = output.NewPrinter(len(allPayloads))
 	a.Printer.PrintBanner(a.Config.URL, a.Config.Param, config.Version, a.Config.Concurrency, len(allPayloads))
 
 	a.printTechStackInfo(len(allPayloads))
 
-	// Establish baseline
 	a.establishBaseline()
 
-	// Execute tests
 	allResults := a.executeTests(allPayloads)
 
 	a.Printer.PrintProgressNewline()
 
-	// Apply ML predictions if enabled
 	if a.Config.MLEnabled && a.MLClient != nil && a.MLClient.Enabled {
 		a.applyMLPredictions(allResults)
 	}
 
-	// Verify RCE on vulnerable results if enabled
 	if a.Config.VerifyRCE && a.Verifier != nil {
 		a.verifyRCE(allResults)
 	}
 
-	// Print results
 	a.printResults(allResults)
 
-	// Compute summary
 	stats := oracle.ComputeSummary(allResults)
 	a.Printer.PrintSummary(stats)
 
@@ -159,18 +139,12 @@ func (a *App) Run() error {
 
 	a.handleJSONOutput(allResults, stats)
 
-	// JSON output
-	a.handleJSONOutput(allResults, stats)
-
-	// Show tips
 	a.printTips(stats)
 
-	// Exit code
 	return a.getExitError(stats)
 }
 
 // printDebugErrors prints full diagnostic detail for every failed test
-// when --debug is enabled: the full wrapped error chain and response context.
 func (a *App) printDebugErrors(results []*types.Result) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  ─── DEBUG: FULL ERROR DIAGNOSTICS ───")
@@ -182,7 +156,6 @@ func (a *App) printDebugErrors(results []*types.Result) {
 
 		fmt.Fprintf(os.Stderr, "\n  %s (%s)\n", r.Filename, r.Technique)
 
-		// Walk the full wrapped error chain, innermost cause last
 		fmt.Fprintln(os.Stderr, "    Error chain:")
 		for e := r.Err; e != nil; e = errors.Unwrap(e) {
 			fmt.Fprintf(os.Stderr, "      -> %s\n", e.Error())
@@ -205,13 +178,11 @@ func (a *App) printDebugErrors(results []*types.Result) {
 func (a *App) loadTemplates() []*payload.Payload {
 	var templatePayloads []*payload.Payload
 
-	// Load single template
 	if a.Config.Template != "" {
 		payloads := a.loadSingleTemplate(a.Config.Template)
 		templatePayloads = append(templatePayloads, payloads...)
 	}
 
-	// Load template directory
 	if a.Config.TemplateDir != "" {
 		payloads := a.loadTemplateDirectory(a.Config.TemplateDir)
 		templatePayloads = append(templatePayloads, payloads...)
@@ -224,15 +195,12 @@ func (a *App) loadTemplates() []*payload.Payload {
 func (a *App) loadSingleTemplate(templatePath string) []*payload.Payload {
 	var templatePayloads []*payload.Payload
 
-	// Try loading as dynamic template first
 	dynamicTmpl, err := template.LoadDynamicTemplate(templatePath)
 	if err == nil && dynamicTmpl != nil {
-		// Register it
 		a.TemplateRegistry.Register(dynamicTmpl)
 
 		fmt.Printf("  📄 Loaded dynamic template: %s", dynamicTmpl.Name)
 
-		// Show type and CVE if available
 		if dynamicTmpl.Type != "" {
 			fmt.Printf(" [%s]", dynamicTmpl.Type)
 		}
@@ -241,29 +209,25 @@ func (a *App) loadSingleTemplate(templatePath string) []*payload.Payload {
 		}
 		fmt.Println()
 
-		// Execute dynamic template if it has multi-step requests
 		if len(dynamicTmpl.Requests) > 0 {
 			fmt.Printf("  🔄 Executing %d-step attack sequence...\n", len(dynamicTmpl.Requests))
 
 			result, err := a.TemplateExecutor.ExecuteDynamicTemplate(dynamicTmpl, a.Config.URL)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠️  Dynamic template execution failed: %s\n", err)
+				fmt.Fprintf(os.Stderr, " Dynamic template execution failed: %s\n", err)
 			} else {
-				fmt.Printf("  ✅ Template execution result: %s\n", result.Verdict)
+				fmt.Printf(" Template execution result: %s\n", result.Verdict)
 
-				// Convert execution result to payloads for GoUpload pipeline
 				for _, payload := range dynamicTmpl.ToPayloads() {
 					templatePayloads = append(templatePayloads, payload)
 				}
 			}
 		} else {
-			// Dynamic template without multi-step (backward compatible)
 			for _, payload := range dynamicTmpl.ToPayloads() {
 				templatePayloads = append(templatePayloads, payload)
 			}
 		}
 	} else {
-		// Fall back to regular template
 		tmpl, err := template.LoadTemplate(templatePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading template: %s\n", err)
@@ -271,7 +235,7 @@ func (a *App) loadSingleTemplate(templatePath string) []*payload.Payload {
 		}
 
 		templatePayloads = tmpl.ToPayloads()
-		fmt.Printf("  📄 Loaded template: %s (%d payloads)\n", tmpl.Name, len(templatePayloads))
+		fmt.Printf(" Loaded template: %s (%d payloads)\n", tmpl.Name, len(templatePayloads))
 	}
 
 	return templatePayloads
@@ -281,7 +245,6 @@ func (a *App) loadSingleTemplate(templatePath string) []*payload.Payload {
 func (a *App) loadTemplateDirectory(templateDir string) []*payload.Payload {
 	var templatePayloads []*payload.Payload
 
-	// Use registry for directory loading
 	err := a.TemplateRegistry.LoadDirectory(templateDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading templates directory: %s\n", err)
@@ -291,7 +254,7 @@ func (a *App) loadTemplateDirectory(templateDir string) []*payload.Payload {
 	allTemplates := a.TemplateRegistry.GetAll()
 	for _, tmpl := range allTemplates {
 		templatePayloads = append(templatePayloads, tmpl.ToPayloads()...)
-		fmt.Printf("  📄 Loaded template: %s\n", tmpl.Name)
+		fmt.Printf(" Loaded template: %s\n", tmpl.Name)
 	}
 
 	return templatePayloads
@@ -318,28 +281,23 @@ func (a *App) applyMLPredictions(allResults []*types.Result) {
 			continue
 		}
 
-		// Find the payload for this result
 		pl := findPayloadForResult(allResults, r)
 		if pl == nil {
 			continue
 		}
 
-		// Extract features
 		features := ml.ExtractFeatures(r, pl)
 		normalizedFeatures := ml.NormalizeFeatures(features)
 
-		// Get prediction from ML server
 		prediction, err := a.MLClient.Predict(normalizedFeatures)
 		if err != nil {
 			continue
 		}
 
-		// Store ML results
 		r.MLProbability = prediction.Confidence
 		r.MLConfidence = prediction.Confidence
 		r.MLLabel = prediction.Verdict
 
-		// Adjust verdict based on ML prediction
 		if prediction.Verdict == "VULNERABLE" && prediction.Confidence >= a.MLClient.MinConfidence {
 			if r.Vulnerable != "VULNERABLE" {
 				r.Vulnerable = "VULNERABLE"
@@ -410,7 +368,7 @@ func (a *App) validateTarget() error {
 		return fmt.Errorf("target validation failed")
 	}
 
-	color.New(color.FgGreen).Fprintf(os.Stderr, "  ✅ Target is reachable\n")
+	color.New(color.FgGreen).Fprintf(os.Stderr, "  Target is reachable\n")
 
 	warnings := validator.GetWarnings(a.Config.URL)
 	for _, w := range warnings {
@@ -423,7 +381,7 @@ func (a *App) validateTarget() error {
 			color.New(color.FgYellow).Fprintf(os.Stderr, "  ⚠️  Warning: %s\n", err)
 			color.New(color.FgYellow).Fprintf(os.Stderr, "  Continuing anyway, but results may be inaccurate.\n")
 		} else {
-			color.New(color.FgGreen).Fprintf(os.Stderr, "  ✅ Upload endpoint is functional\n")
+			color.New(color.FgGreen).Fprintf(os.Stderr, "   Upload endpoint is functional\n")
 		}
 	}
 
@@ -434,7 +392,7 @@ func (a *App) validateTarget() error {
 // printCheckSuccess shows success message for --check mode
 func (a *App) printCheckSuccess() {
 	fmt.Fprintln(os.Stderr)
-	color.New(color.FgGreen, color.Bold).Fprintln(os.Stderr, "  ✅ Target validation passed!")
+	color.New(color.FgGreen, color.Bold).Fprintln(os.Stderr, "  Target validation passed!")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintf(os.Stderr, "  Run without --check to start the full scan:\n")
 	fmt.Fprintf(os.Stderr, "    GoUpload -u %s -p %s --allow-list .txt,.jpg\n\n", a.Config.URL, a.Config.Param)
@@ -451,7 +409,7 @@ func (a *App) fingerprint() {
 			a.TechStack = "all"
 		} else {
 			a.TechStack = mapLanguageToTechStack(ts.Language)
-			color.New(color.FgGreen).Fprintf(os.Stderr, "  ✅ Detected %s with %d%% confidence\n\n", a.TechStack, ts.Confidence)
+			color.New(color.FgGreen).Fprintf(os.Stderr, "  Detected %s with %d%% confidence\n\n", a.TechStack, ts.Confidence)
 		}
 	}
 }
@@ -460,7 +418,7 @@ func (a *App) fingerprint() {
 func (a *App) selectModules() {
 	if len(a.Config.Modules) > 0 {
 		payload.EnableModules(a.Config.Modules)
-		fmt.Fprintf(os.Stderr, "  🎯 Running modules: %s\n", strings.Join(a.Config.Modules, ", "))
+		fmt.Fprintf(os.Stderr, "   Running modules: %s\n", strings.Join(a.Config.Modules, ", "))
 	}
 }
 
@@ -479,8 +437,8 @@ func (a *App) generatePayloads(templatePayloads []*payload.Payload) []*payload.P
 // printTechStackInfo shows targeting information
 func (a *App) printTechStackInfo(payloadCount int) {
 	if a.TechStack != "all" {
-		color.New(color.FgCyan).Fprintf(os.Stderr, "  🎯 Targeting: %s\n", strings.ToUpper(a.TechStack))
-		color.New(color.FgCyan).Fprintf(os.Stderr, "  🧪 Payloads: %d (filtered for %s stack)\n", payloadCount, a.TechStack)
+		color.New(color.FgCyan).Fprintf(os.Stderr, "  Targeting: %s\n", strings.ToUpper(a.TechStack))
+		color.New(color.FgCyan).Fprintf(os.Stderr, "  Payloads: %d (filtered for %s stack)\n", payloadCount, a.TechStack)
 		output.PrintSeparatorFunc()
 	}
 }
@@ -521,6 +479,7 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		payload.TestTypeUnicodeEncoding,
 		payload.TestTypeGraphQL,
 		payload.TestTypeXXE,
+		payload.TestTypePolyglotArchive,
 	}
 
 	moduleNames := map[payload.TestType]string{
@@ -531,10 +490,11 @@ func (a *App) executeTests(allPayloads []*payload.Payload) []*types.Result {
 		payload.TestTypeMagicByteSpoof:      "MODULE B: Magic Byte Injection",
 		payload.TestTypeFilenameObfuscation: "MODULE C: Filename Obfuscation & Sanitization Faults",
 		payload.TestTypePathTraversal:       "MODULE D: Path Traversal Sequences",
-		payload.TestTypeServerConfig:        "MODULE F: Server Configuration Overrides",
+		payload.TestTypeServerConfig:        "SERVER CONFIG: .htaccess / web.config / .user.ini",
 		payload.TestTypeUnicodeEncoding:     "MODULE G: Unicode & Encoding Vulnerabilities",
 		payload.TestTypeGraphQL:             "MODULE I: GraphQL File Uploads",
 		payload.TestTypeXXE:                 "MODULE J: XXE Injection via File Upload",
+		payload.TestTypePolyglotArchive:     "POLYGLOT & ARCHIVE: GIF+PHP, SVG XSS, ZIP Slip, PDF JS",
 	}
 
 	for _, modType := range moduleOrder {
@@ -581,7 +541,7 @@ func (a *App) verifyRCE(allResults []*types.Result) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "\n  🚀 Verifying RCE on %d vulnerable uploads...\n", vulnerableCount)
+	fmt.Fprintf(os.Stderr, "\n  Verifying RCE on %d vulnerable uploads...\n", vulnerableCount)
 
 	verifiedCount := 0
 	for _, r := range allResults {
@@ -589,7 +549,7 @@ func (a *App) verifyRCE(allResults []*types.Result) {
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "  🔍 Testing %s...", r.Filename)
+		fmt.Fprintf(os.Stderr, " Testing %s...", r.Filename)
 
 		err := a.Verifier.VerifyRCE(r, a.Config.URL)
 		if err != nil {
@@ -599,7 +559,7 @@ func (a *App) verifyRCE(allResults []*types.Result) {
 
 		if r.RCEVerified {
 			verifiedCount++
-			color.New(color.FgGreen).Fprintf(os.Stderr, " ✅ RCE CONFIRMED\n")
+			color.New(color.FgGreen).Fprintf(os.Stderr, "  RCE CONFIRMED\n")
 			color.New(color.FgGreen).Fprintf(os.Stderr, "    Proof: %s\n", r.RCEProof)
 			color.New(color.FgGreen).Fprintf(os.Stderr, "    URL: %s?cmd=%s\n", r.FileURL, r.RCECommand)
 		} else {
@@ -608,7 +568,7 @@ func (a *App) verifyRCE(allResults []*types.Result) {
 	}
 
 	if verifiedCount > 0 {
-		color.New(color.FgGreen, color.Bold).Fprintf(os.Stderr, "\n  ✅ RCE verified on %d/%d vulnerable uploads!\n\n", verifiedCount, vulnerableCount)
+		color.New(color.FgGreen, color.Bold).Fprintf(os.Stderr, "\n  RCE verified on %d/%d vulnerable uploads!\n\n", verifiedCount, vulnerableCount)
 	} else {
 		color.New(color.FgYellow).Fprintf(os.Stderr, "\n  ⚠️  RCE could not be verified on any vulnerable uploads.\n\n")
 	}
@@ -630,6 +590,7 @@ func (a *App) printResults(allResults []*types.Result) {
 		payload.TestTypeServerConfig,
 		payload.TestTypeUnicodeEncoding,
 		payload.TestTypeTemplate,
+		payload.TestTypePolyglotArchive,
 	}
 
 	moduleNames := map[payload.TestType]string{
@@ -644,6 +605,7 @@ func (a *App) printResults(allResults []*types.Result) {
 		payload.TestTypeServerConfig:        "SERVER CONFIG MODULE",
 		payload.TestTypeUnicodeEncoding:     "UNICODE MODULE",
 		payload.TestTypeTemplate:            "TEMPLATE MODULE",
+		payload.TestTypePolyglotArchive:     "POLYGLOT & ARCHIVE MODULE",
 	}
 
 	for _, modType := range moduleOrder {

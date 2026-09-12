@@ -39,12 +39,13 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	var all []*Payload
 
 	if graphqlMutation != "" {
-		if IsModuleEnabled(TestTypeExtensionEvasion) {
+		if IsModuleEnabled(TestTypeGraphQL) {
 			all = append(all, moduleGraphQLWithMutation(graphqlMutation, graphqlVariable, modulePath, techStack, moduleOverwrite)...)
 		}
 		return all
 	}
 
+	// ── Tech-agnostic modules ────────────────────────────────────────
 	if IsModuleEnabled(TestTypeFilenameObfuscation) {
 		all = append(all, moduleC()...)
 	}
@@ -63,7 +64,16 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 	if IsModuleEnabled(TestTypeRaceCondition) {
 		all = append(all, moduleRace()...)
 	}
+	// ✅ FIX: Polyglot works for ALL tech stacks
+	if IsModuleEnabled(TestTypePolyglotArchive) {
+		all = append(all, moduleF()...)
+	}
+	// ✅ FIX: Server Config works for ALL tech stacks
+	if IsModuleEnabled(TestTypeServerConfig) {
+		all = append(all, moduleServerConfig()...)
+	}
 
+	// ── Tech-specific modules ────────────────────────────────────────
 	switch strings.ToLower(techStack) {
 	case "php":
 		if IsModuleEnabled(TestTypeExtensionEvasion) {
@@ -74,9 +84,6 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 		}
 		if IsModuleEnabled(TestTypePathTraversal) {
 			all = append(all, moduleD()...)
-		}
-		if IsModuleEnabled(TestTypePolyglotArchive) {
-			all = append(all, moduleF()...)
 		}
 	case "asp.net":
 		if IsModuleEnabled(TestTypeExtensionEvasion) {
@@ -118,9 +125,6 @@ func AllPayloads(techStack, graphqlMutation, graphqlVariable, modulePath string,
 		}
 		if IsModuleEnabled(TestTypePathTraversal) {
 			all = append(all, moduleD()...)
-		}
-		if IsModuleEnabled(TestTypePolyglotArchive) {
-			all = append(all, moduleF()...)
 		}
 	}
 

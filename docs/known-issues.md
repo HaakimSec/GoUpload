@@ -1,19 +1,22 @@
 # Known Issues
 
-## v1.7.0 Issues
+## v1.8.2 - Resolved
 
-### Server-Config Module (Empty)
-- **Severity:** High
-- **Impact:** Cannot test server configuration exploits
-- **Reproduction:** `./GoUpload --module server-config` → 0 payloads
-- **Fix:** Create `module.server_config.go`
+### ✅ Server-Config Module (FIXED)
+- **Root Cause:** `moduleServerConfig()` didn't exist and was never called in `AllPayloads()`
+- **Fix:** Added `module.server_config.go` + wired in generator (tech-agnostic)
+- **Payloads:** 42 (.htaccess, web.config, .user.ini, nginx, lighttpd, tomcat, nodejs)
 
-### Polyglot Module (Empty)
-- **Severity:** Medium
-- **Impact:** Cannot test ImageMagick exploits
-- **Reproduction:** `./GoUpload --module polyglot` → 0 payloads
-- **Fix:** Verify module registration
+### ✅ Polyglot Module (FIXED)
+- **Root Cause:** `moduleF()` was only called for `php` and `default` tech stacks
+- **Fix:** Moved polyglot out of the tech switch — now runs for all stacks
+- **Payloads:** 11 (GIF/PNG/JPEG/WebP+PHP, SVG XSS/XXE, PDF JS, ZIP slip, ZIP bomb, HTML)
 
-## Fixed in v1.7.1
-- [ ] Server-config module
-- [ ] Polyglot module
+### ✅ GraphQL Registry (FIXED)
+- **Root Cause:** Registry entry `graphql` pointed to `TestTypeExtensionEvasion`
+- **Fix:** Corrected to `TestTypeGraphQL`
+- **Impact:** `--module graphql` now correctly filters to GraphQL payloads
+
+## v1.8.2 - Current
+
+No known issues.
