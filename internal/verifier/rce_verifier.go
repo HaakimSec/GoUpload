@@ -405,43 +405,43 @@ func (v *RCEVerifier) addCommandParam(fileURL, command string) string {
 }
 
 func (v *RCEVerifier) extractProof(output string) string {
-	// Common indicators of successful command execution
+
 	indicators := []string{
 		"uid=",
 		"gid=",
 		"groups=",
 		"www-data",
-		"daemon",
 		"apache",
 		"nginx",
+		"nobody",
+		"httpd",
 		"root:",
 		"NT AUTHORITY",
-		"user=",
-		"home=",
-		"PWD=",
-		"USER=",
-		"haakimsec", // Add common usernames
-		"kali",
-		"parrot",
-		"RCE_TEST_MARKER:",
-		"RCE_SUCCESS:",
+		"nt authority\\",
+		// ── Windows environment markers ──
+		"USERNAME=",
+		"COMPUTERNAME=",
+		"USERPROFILE=",
+		// ── Custom markers injected by GoUpload payloads ──
 		"PHTML_RCE_MARKER",
 		"PHP_RCE_MARKER",
-		"UNAUTH_RCE_SUCCESS",
+		"JSP_RCE_MARKER",
+		"ASP_RCE_MARKER",
+		"NODE_RCE_MARKER",
 		"RCE_TEST_MARKER",
 		"RCE_SUCCESS",
+		"UNAUTH_RCE_SUCCESS",
 	}
-
+	indicators = append(indicators, debugIndicators...)
 	for _, indicator := range indicators {
 		if strings.Contains(output, indicator) {
-			// Extract relevant line
 			lines := strings.Split(output, "\n")
 			for _, line := range lines {
 				if strings.Contains(line, indicator) {
 					return strings.TrimSpace(line)
 				}
 			}
-			// Return first 100 chars if no specific line found
+
 			if len(output) > 100 {
 				return output[:100]
 			}
