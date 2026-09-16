@@ -32,6 +32,7 @@ type Payload struct {
 	Tags           []string
 	GraphQL        *GraphQLFields
 	RaceSync       bool
+	ExtraFields    map[string]string // per-payload form fields (from template form_data)
 }
 
 // AllPayloads generates the complete test matrix filtered by tech stack.

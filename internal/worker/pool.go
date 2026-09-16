@@ -203,6 +203,17 @@ func (p *Pool) executeTest(pl *payload.Payload) *types.Result {
 		}
 	}
 
+	// Add per-payload form fields (from template form_data)
+	if pl.ExtraFields != nil {
+		for key, val := range pl.ExtraFields {
+			if err := writer.WriteField(key, val); err != nil {
+				r.Err = fmt.Errorf("failed to write extra field %s: %w", key, err)
+				r.Duration = time.Since(start)
+				return r
+			}
+		}
+	}
+
 	// ── BRANCH 1: GRAPHQL MULTIPART UPLOADS ──
 	if pl.GraphQL != nil {
 		// 1. Write GraphQL operations field

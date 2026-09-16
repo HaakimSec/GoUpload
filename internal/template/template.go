@@ -134,6 +134,7 @@ func (t *Template) ToPayloads() []*payload.Payload {
 			Body:        []byte(tp.Body),
 			ContentType: tp.ContentType,
 			Tags:        append([]string{"template", t.Name}, tp.Tags...),
+			ExtraFields: t.FormData,
 		}
 		payloads = append(payloads, p)
 	}

