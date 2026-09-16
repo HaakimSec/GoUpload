@@ -31,6 +31,7 @@ type Result struct {
 	MLConfidence     float64       `json:"ml_confidence,omitempty"`
 	MLLabel          string        `json:"ml_label,omitempty"`
 	ErrType          ErrorType     `json:"error_type,omitempty"`
+	RCEStatus        string
 }
 
 type ErrorType string
