@@ -436,6 +436,26 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 		flagSet["filename-reflected-in-response"] ||
 		flagSet["success-keyword-with-suspicious-ext"]
 
+	rejectionIndicators := []string{
+		"invalid file type", "not allowed", "extension not permitted",
+		"file type not supported", "rejected", "not a valid image",
+		"invalid extension", "forbidden file type", "disallowed",
+	}
+	bodyToCheck := strings.ToLower(result.ResponseBody)
+	if bodyToCheck == "" {
+		bodyToCheck = strings.ToLower(result.BodySnippet)
+	}
+	hasRejectionWording := false
+	for _, indicator := range rejectionIndicators {
+		if strings.Contains(bodyToCheck, indicator) {
+			hasRejectionWording = true
+			break
+		}
+	}
+	if hasRejectionWording && !hasSuccessIndicator {
+		return VerdictSafe
+	}
+
 	// CRITICAL FIX: WordPress File Manager / elFinder detection
 	if flagSet["elfinder-upload-success"] {
 		if hasSuspiciousExt {
@@ -482,10 +502,6 @@ func determineVerdict(flags []string, result *types.Result, pl *payload.Payload)
 	// Medium evidence: 200 + suspicious ext (no explicit success indicator)
 	if result.StatusCode == 200 && hasSuspiciousExt {
 		// Check if response contains upload indicators
-		bodyToCheck := strings.ToLower(result.ResponseBody)
-		if bodyToCheck == "" {
-			bodyToCheck = strings.ToLower(result.BodySnippet)
-		}
 		if strings.Contains(bodyToCheck, "upload") || strings.Contains(bodyToCheck, "success") {
 			return VerdictVulnerable
 		}

@@ -41,12 +41,13 @@ type TargetConfig struct {
 
 // TemplatePayload defines a single payload in a template
 type TemplatePayload struct {
-	Name        string   `yaml:"name"`
-	Filename    string   `yaml:"filename"`
-	Extension   string   `yaml:"extension"`
-	ContentType string   `yaml:"content_type"`
-	Body        string   `yaml:"body"`
-	Tags        []string `yaml:"tags"`
+	Name        string            `yaml:"name"`
+	Filename    string            `yaml:"filename"`
+	Extension   string            `yaml:"extension"`
+	ContentType string            `yaml:"content_type"`
+	Body        string            `yaml:"body"`
+	Tags        []string          `yaml:"tags"`
+	FormData    map[string]string `yaml:"form_data,omitempty"`
 }
 
 // GraphQLTemplateConfig defines GraphQL-specific template settings
