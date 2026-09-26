@@ -474,7 +474,7 @@ The `docs/` directory contains detailed documentation:
 | [known-issues.md](docs/known-issues.md) | Known issues and resolutions |
 | [ROADMAP.md](ROADMAP.md) | Future implementation plan |
 
-You can refer more docs on [goupload.netlify.app](goupload.netlify.app/docs)
+You can refer more docs on [goupload.netlify.app](https://goupload.netlify.app/docs)
 
 ## 📊 Example Output
 
